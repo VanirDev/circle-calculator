@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SE Circle Calculator</title>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: #1a1a2e;
+      color: #cdd6f4;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      min-height: 100vh;
+      padding: 16px;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      margin-bottom: 16px;
+      color: #e2e8f0;
+    }
+
+    #controls {
+      background: #16213e;
+      border-radius: 8px;
+      padding: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: flex-start;
+      margin-bottom: 16px;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .control-group label {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    input[type="number"] {
+      background: #0f3460;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      color: #e2e8f0;
+      font-size: 1rem;
+      padding: 6px 10px;
+      width: 80px;
+      outline: none;
+    }
+
+    input[type="number"]:focus {
+      border-color: #e94560;
+    }
+
+    .toggle-group {
+      display: flex;
+      gap: 6px;
+    }
+
+    .toggle-btn {
+      background: #0f3460;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      color: #aaa;
+      cursor: pointer;
+      font-size: 0.9rem;
+      padding: 6px 14px;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .toggle-btn.active {
+      background: #e94560;
+      border-color: #e94560;
+      color: #fff;
+    }
+
+    .checkbox-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .checkbox-label input[type="checkbox"] {
+      accent-color: #e94560;
+      cursor: pointer;
+      width: 15px;
+      height: 15px;
+    }
+
+    .checkbox-label input[type="checkbox"]:disabled {
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    #grid-canvas {
+      border: 1px solid #334155;
+      border-radius: 4px;
+      cursor: crosshair;
+      display: block;
+      background: #0d1117;
+    }
+
+    #legend {
+      background: #16213e;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-top: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.85rem;
+    }
+
+    .legend-swatch {
+      width: 14px;
+      height: 14px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    #tooltip {
+      position: fixed;
+      background: #16213e;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      color: #e2e8f0;
+      font-size: 0.8rem;
+      padding: 6px 10px;
+      pointer-events: none;
+      display: none;
+      z-index: 1000;
+    }
+  </style>
+</head>
+<body>
+  <h1>SE Circle Calculator</h1>
+
+  <div id="controls">
+    <div class="control-group">
+      <label for="width-input">Width</label>
+      <input id="width-input" type="number" min="3" max="200" value="20"
+             oninput="state.width = Math.max(3, Math.min(200, +this.value)); recalculate();" />
+    </div>
+
+    <div class="control-group">
+      <label for="height-input">Height</label>
+      <input id="height-input" type="number" min="3" max="200" value="20"
+             oninput="state.height = Math.max(3, Math.min(200, +this.value)); recalculate();" />
+    </div>
+
+    <div class="control-group">
+      <label>Mode</label>
+      <div class="toggle-group">
+        <button class="toggle-btn" id="btn-internal" onclick="setMode('internal')">Internal</button>
+        <button class="toggle-btn active" id="btn-external" onclick="setMode('external')">External</button>
+      </div>
+    </div>
+
+    <div class="control-group">
+      <label>Block Types</label>
+      <div class="checkbox-group" id="block-checkboxes">
+        <label class="checkbox-label">
+          <input type="checkbox" value="flat" checked disabled />
+          Flat
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" value="slope45" checked
+                 onchange="toggleBlock('slope45', this.checked)" />
+          45°
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" value="slope2" checked
+                 onchange="toggleBlock('slope2', this.checked)" />
+          1:2
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" value="slope3"
+                 onchange="toggleBlock('slope3', this.checked)" />
+          1:3
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" value="slope4"
+                 onchange="toggleBlock('slope4', this.checked)" />
+          1:4
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" value="slope5"
+                 onchange="toggleBlock('slope5', this.checked)" />
+          1:5
+        </label>
+        <label class="checkbox-label">
+          <input type="checkbox" value="slope6"
+                 onchange="toggleBlock('slope6', this.checked)" />
+          1:6
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <canvas id="grid-canvas"></canvas>
+  <div id="legend"></div>
+  <div id="tooltip"></div>
+
+  <script>
+    const BLOCK_TYPES = {
+      flat:    { name: 'Flat',  dx: 1, dy: 0, angle: 0,                    color: '#4a9eff' },
+      slope45: { name: '45°',   dx: 1, dy: 1, angle: Math.PI / 4,          color: '#e94560' },
+      slope2:  { name: '1:2',   dx: 1, dy: 2, angle: Math.atan2(1, 2),     color: '#f5a623' },
+      slope3:  { name: '1:3',   dx: 1, dy: 3, angle: Math.atan2(1, 3),     color: '#7ed321' },
+      slope4:  { name: '1:4',   dx: 1, dy: 4, angle: Math.atan2(1, 4),     color: '#bd10e0' },
+      slope5:  { name: '1:5',   dx: 1, dy: 5, angle: Math.atan2(1, 5),     color: '#50e3c2' },
+      slope6:  { name: '1:6',   dx: 1, dy: 6, angle: Math.atan2(1, 6),     color: '#ff6b6b' },
+    };
+
+    const state = {
+      width: 20,
+      height: 20,
+      mode: 'external',
+      enabledBlocks: new Set(['flat', 'slope45', 'slope2']),
+      grid: [],
+      hoverCell: null,
+    };
+
+    function setMode(mode) {
+      state.mode = mode;
+      document.getElementById('btn-internal').classList.toggle('active', mode === 'internal');
+      document.getElementById('btn-external').classList.toggle('active', mode === 'external');
+      recalculate();
+    }
+
+    function toggleBlock(key, enabled) {
+      if (enabled) {
+        state.enabledBlocks.add(key);
+      } else {
+        state.enabledBlocks.delete(key);
+      }
+      recalculate();
+    }
+
+    function getEnabledBlocks() {
+      return Object.entries(BLOCK_TYPES)
+        .filter(([key]) => state.enabledBlocks.has(key))
+        .map(([key, block]) => ({ key, ...block }));
+    }
+
+    function recalculate() {
+      computeCircle();
+      render();
+    }
+
+    function computeCircle() {
+      state.grid = [];
+    }
+
+    function render() {
+      // stub
+    }
+
+    function buildLegend() {
+      const legend = document.getElementById('legend');
+      legend.innerHTML = '';
+      for (const [, block] of Object.entries(BLOCK_TYPES)) {
+        const item = document.createElement('div');
+        item.className = 'legend-item';
+
+        const swatch = document.createElement('div');
+        swatch.className = 'legend-swatch';
+        swatch.style.background = block.color;
+
+        const label = document.createElement('span');
+        label.textContent = block.name;
+
+        item.appendChild(swatch);
+        item.appendChild(label);
+        legend.appendChild(item);
+      }
+    }
+
+    buildLegend();
+    recalculate();
+  </script>
+</body>
+</html>
