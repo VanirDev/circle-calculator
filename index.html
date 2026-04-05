@@ -295,7 +295,7 @@
 
       const blocks = getEnabledBlocks();
       const segments = computeQuadrant(rx, ry, blocks);
-      placeQuadrant(grid, segments, cx, cy, w, h);
+      placeQuadrant(grid, segments, cx, cy, w, h, state.mode);
 
       state.grid = grid;
     }
@@ -429,11 +429,19 @@
       return Array.from(results.values());
     }
 
-    function placeQuadrant(grid, segments, cx, cy, w, h) {
+    function placeQuadrant(grid, segments, cx, cy, w, h, mode) {
+      // External: slope faces outward, solid fills inward (default arc position)
+      // Internal: slope faces inward, solid fills outward (shift blocks outward by 1)
+      const offset = mode === 'internal' ? -1 : 0;
+
       for (const seg of segments) {
         const cells = getSegmentCells(seg);
         for (const cell of cells) {
-          const mirrors = mirrorPositions(cell.x, cell.y, cx, cy, w, h);
+          // Apply offset: shift cells away from center for internal mode
+          const ox = cell.x;
+          const oy = cell.y + offset;
+          if (oy < 0) continue;
+          const mirrors = mirrorPositions(ox, oy, cx, cy, w, h);
           for (const m of mirrors) {
             if (grid[m.gy] && grid[m.gy][m.gx] === null) {
               grid[m.gy][m.gx] = { type: seg.blockKey, rotation: m.rotation };
