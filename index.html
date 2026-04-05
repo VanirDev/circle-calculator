@@ -443,6 +443,19 @@
       }
     }
 
+    function lightenColor(hex, amount) {
+      // Parse hex to r,g,b
+      const h = hex.replace('#', '');
+      const r = parseInt(h.slice(0, 2), 16);
+      const g = parseInt(h.slice(2, 4), 16);
+      const b = parseInt(h.slice(4, 6), 16);
+      // Lighten by blending toward white
+      const lr = Math.min(255, Math.round(r + (255 - r) * amount));
+      const lg = Math.min(255, Math.round(g + (255 - g) * amount));
+      const lb = Math.min(255, Math.round(b + (255 - b) * amount));
+      return `rgb(${lr}, ${lg}, ${lb})`;
+    }
+
     function render() {
       const canvas = document.getElementById('grid-canvas');
       const ctx = canvas.getContext('2d');
@@ -461,16 +474,95 @@
       for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
           const cell = state.grid[y] && state.grid[y][x];
+          const isHovered = state.hoverCell && state.hoverCell.x === x && state.hoverCell.y === y;
+          const px = x * cellSize;
+          const py = y * cellSize;
+          const cs = cellSize - 1;
+
           if (cell) {
             const blockType = BLOCK_TYPES[cell.type];
-            ctx.fillStyle = blockType ? blockType.color : '#666';
+            const baseColor = blockType ? blockType.color : '#666';
+            ctx.fillStyle = isHovered ? lightenColor(baseColor, 0.3) : baseColor;
+            ctx.fillRect(px, py, cs, cs);
+
+            // Draw slope indicator for non-flat blocks
+            if (cell.type !== 'flat' && cellSize >= 6) {
+              ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              // rotation 0: bottom-left to top-right
+              // rotation 1: bottom-right to top-left
+              // rotation 2: top-left to bottom-right
+              // rotation 3: top-right to bottom-left
+              const r = cell.rotation;
+              if (r === 0) {
+                ctx.moveTo(px, py + cs);
+                ctx.lineTo(px + cs, py);
+              } else if (r === 1) {
+                ctx.moveTo(px + cs, py + cs);
+                ctx.lineTo(px, py);
+              } else if (r === 2) {
+                ctx.moveTo(px, py);
+                ctx.lineTo(px + cs, py + cs);
+              } else {
+                ctx.moveTo(px + cs, py);
+                ctx.lineTo(px, py + cs);
+              }
+              ctx.stroke();
+            }
           } else {
-            ctx.fillStyle = '#222';
+            ctx.fillStyle = isHovered ? '#333' : '#222';
+            ctx.fillRect(px, py, cs, cs);
           }
-          ctx.fillRect(x * cellSize, y * cellSize, cellSize - 1, cellSize - 1);
         }
       }
     }
+
+    function getCellFromMouse(e) {
+      const canvas = document.getElementById('grid-canvas');
+      const rect = canvas.getBoundingClientRect();
+      const w = state.width;
+      const h = state.height;
+      const cellSize = Math.max(4, Math.min(30, Math.floor(600 / Math.max(w, h))));
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      const cx = Math.floor(mx / cellSize);
+      const cy = Math.floor(my / cellSize);
+      if (cx >= 0 && cx < w && cy >= 0 && cy < h) {
+        return { x: cx, y: cy };
+      }
+      return null;
+    }
+
+    const _canvas = document.getElementById('grid-canvas');
+    const _tooltip = document.getElementById('tooltip');
+
+    _canvas.addEventListener('mousemove', function(e) {
+      const cell = getCellFromMouse(e);
+      const prev = state.hoverCell;
+      const changed = !prev && cell ||
+                      prev && !cell ||
+                      prev && cell && (prev.x !== cell.x || prev.y !== cell.y);
+      state.hoverCell = cell;
+      if (changed) render();
+
+      if (cell) {
+        const gridCell = state.grid[cell.y] && state.grid[cell.y][cell.x];
+        const name = gridCell ? (BLOCK_TYPES[gridCell.type] ? BLOCK_TYPES[gridCell.type].name : gridCell.type) : 'Empty';
+        _tooltip.textContent = name;
+        _tooltip.style.display = 'block';
+        _tooltip.style.left = (e.clientX + 12) + 'px';
+        _tooltip.style.top = (e.clientY - 8) + 'px';
+      } else {
+        _tooltip.style.display = 'none';
+      }
+    });
+
+    _canvas.addEventListener('mouseleave', function() {
+      state.hoverCell = null;
+      _tooltip.style.display = 'none';
+      render();
+    });
 
     function buildLegend() {
       const legend = document.getElementById('legend');
