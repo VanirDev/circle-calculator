@@ -276,6 +276,10 @@
       render();
     }
 
+    function getCellSize() {
+      return Math.max(4, Math.min(30, Math.floor(600 / Math.max(state.width, state.height))));
+    }
+
     function computeCircle() {
       const w = state.width;
       const h = state.height;
@@ -284,6 +288,11 @@
       const grid = [];
       for (let y = 0; y < h; y++) {
         grid[y] = new Array(w).fill(null);
+      }
+
+      if (w < 3 || h < 3) {
+        state.grid = grid;
+        return;
       }
 
       // Radii: for external mode, blocks sit outside the ellipse boundary
@@ -470,7 +479,7 @@
       const w = state.width;
       const h = state.height;
 
-      const cellSize = Math.max(4, Math.min(30, Math.floor(600 / Math.max(w, h))));
+      const cellSize = getCellSize();
       canvas.width = w * cellSize;
       canvas.height = h * cellSize;
 
@@ -531,7 +540,7 @@
       const rect = canvas.getBoundingClientRect();
       const w = state.width;
       const h = state.height;
-      const cellSize = Math.max(4, Math.min(30, Math.floor(600 / Math.max(w, h))));
+      const cellSize = getCellSize();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
       const cx = Math.floor(mx / cellSize);
