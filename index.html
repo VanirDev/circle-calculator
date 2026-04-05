@@ -277,11 +277,199 @@
     }
 
     function computeCircle() {
-      state.grid = [];
+      const w = state.width;
+      const h = state.height;
+
+      // Initialize grid[y][x] = null
+      const grid = [];
+      for (let y = 0; y < h; y++) {
+        grid[y] = new Array(w).fill(null);
+      }
+
+      // Radii: for external mode, blocks sit outside the ellipse boundary
+      // For internal mode, blocks sit inside
+      const cx = w / 2;
+      const cy = h / 2;
+      const rx = cx; // half-width in grid units
+      const ry = cy; // half-height in grid units
+
+      const blocks = getEnabledBlocks();
+      const segments = computeQuadrant(rx, ry, blocks);
+      placeQuadrant(grid, segments, cx, cy, w, h);
+
+      state.grid = grid;
+    }
+
+    function computeQuadrant(rx, ry, blocks) {
+      // Walk the arc in quadrant-local coords
+      // x goes right from center, y goes down from top
+      // We walk from top (x=0, y=0) toward the 45-degree line and beyond to the right
+      const segments = [];
+      let x = 0;
+      let y = 0;
+
+      // We walk until we've covered the quadrant
+      // Quadrant spans from top-center to right-center
+      // In local coords: x from 0 to floor(rx), y from 0 to floor(ry)
+      const maxX = Math.floor(rx);
+      const maxY = Math.floor(ry);
+
+      while (x < maxX && y < maxY) {
+        // Current position on the ellipse in ellipse-space
+        // Map grid position to ellipse parameter
+        // ex, ey are the point on the ellipse closest to current grid position
+        const ex = x + 0.5;
+        const ey = y + 0.5;
+
+        // Tangent angle at this point on the ellipse
+        // The gradient of the ellipse x^2/rx^2 + y^2/ry^2 = 1 is (2x/rx^2, 2y/ry^2)
+        // The tangent is perpendicular to the gradient
+        // Tangent angle from vertical: atan2(ry^2 * ex, rx^2 * ey)
+        const tangentAngle = Math.atan2(ry * ry * ex, rx * rx * ey);
+
+        // Find best matching block
+        let bestBlock = null;
+        let bestDiff = Infinity;
+        for (const block of blocks) {
+          const diff = Math.abs(tangentAngle - block.angle);
+          if (diff < bestDiff) {
+            bestDiff = diff;
+            bestBlock = block;
+          }
+        }
+
+        // Determine orientation based on tangent angle
+        const vertical = tangentAngle <= Math.PI / 4;
+
+        let dx, dy;
+        if (vertical) {
+          // Steeper section: advance x by 1, y by block.dy
+          dx = 1;
+          dy = Math.max(1, bestBlock.dy);
+        } else {
+          // Shallower section: advance x by block.dy, y by 1
+          dx = Math.max(1, bestBlock.dy);
+          dy = 1;
+        }
+
+        // Don't overshoot the quadrant bounds
+        if (x + dx > maxX) dx = maxX - x;
+        if (y + dy > maxY) dy = maxY - y;
+        if (dx <= 0 || dy <= 0) break;
+
+        segments.push({
+          x, y, dx, dy,
+          blockKey: bestBlock.key,
+          vertical
+        });
+
+        x += dx;
+        y += dy;
+      }
+
+      // Fill remaining gap to reach the edges if needed
+      // Fill remaining x with flat blocks (horizontal run)
+      while (x < maxX) {
+        const remaining = maxX - x;
+        segments.push({
+          x, y, dx: Math.min(remaining, 1), dy: 1,
+          blockKey: 'flat',
+          vertical: false
+        });
+        x += 1;
+      }
+
+      // Fill remaining y with flat blocks (vertical run)
+      while (y < maxY) {
+        segments.push({
+          x, y, dx: 1, dy: Math.min(maxY - y, 1),
+          blockKey: 'flat',
+          vertical: true
+        });
+        y += 1;
+      }
+
+      return segments;
+    }
+
+    function getSegmentCells(seg) {
+      const cells = [];
+      for (let ix = 0; ix < seg.dx; ix++) {
+        for (let iy = 0; iy < seg.dy; iy++) {
+          cells.push({ x: seg.x + ix, y: seg.y + iy });
+        }
+      }
+      return cells;
+    }
+
+    function mirrorPositions(qx, qy, cx, cy, w, h) {
+      const results = new Map(); // key -> {gx, gy, rotation}
+      const floorCx = Math.floor(cx);
+      const ceilCx = Math.ceil(cx);
+
+      // Top-right quadrant (rotation 0)
+      const tr = { gx: floorCx + qx, gy: qy, rotation: 0 };
+      // Top-left quadrant (rotation 1)
+      const tl = { gx: ceilCx - 1 - qx, gy: qy, rotation: 1 };
+      // Bottom-right quadrant (rotation 2)
+      const br = { gx: floorCx + qx, gy: h - 1 - qy, rotation: 2 };
+      // Bottom-left quadrant (rotation 3)
+      const bl = { gx: ceilCx - 1 - qx, gy: h - 1 - qy, rotation: 3 };
+
+      const positions = [tr, tl, br, bl];
+      for (const pos of positions) {
+        if (pos.gx >= 0 && pos.gx < w && pos.gy >= 0 && pos.gy < h) {
+          const key = pos.gy * w + pos.gx;
+          if (!results.has(key)) {
+            results.set(key, pos);
+          }
+        }
+      }
+
+      return Array.from(results.values());
+    }
+
+    function placeQuadrant(grid, segments, cx, cy, w, h) {
+      for (const seg of segments) {
+        const cells = getSegmentCells(seg);
+        for (const cell of cells) {
+          const mirrors = mirrorPositions(cell.x, cell.y, cx, cy, w, h);
+          for (const m of mirrors) {
+            if (grid[m.gy] && grid[m.gy][m.gx] === null) {
+              grid[m.gy][m.gx] = { type: seg.blockKey, rotation: m.rotation };
+            }
+          }
+        }
+      }
     }
 
     function render() {
-      // stub
+      const canvas = document.getElementById('grid-canvas');
+      const ctx = canvas.getContext('2d');
+      const w = state.width;
+      const h = state.height;
+
+      const cellSize = Math.max(4, Math.min(30, Math.floor(600 / Math.max(w, h))));
+      canvas.width = w * cellSize;
+      canvas.height = h * cellSize;
+
+      // Background
+      ctx.fillStyle = '#0d1117';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw cells
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const cell = state.grid[y] && state.grid[y][x];
+          if (cell) {
+            const blockType = BLOCK_TYPES[cell.type];
+            ctx.fillStyle = blockType ? blockType.color : '#666';
+          } else {
+            ctx.fillStyle = '#222';
+          }
+          ctx.fillRect(x * cellSize, y * cellSize, cellSize - 1, cellSize - 1);
+        }
+      }
     }
 
     function buildLegend() {
