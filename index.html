@@ -146,6 +146,21 @@
       flex-shrink: 0;
     }
 
+    #text-output {
+      background: #0d1117;
+      border: 1px solid #334155;
+      border-radius: 4px;
+      color: #e2e8f0;
+      font-family: monospace;
+      font-size: 0.75rem;
+      line-height: 1.1;
+      padding: 12px;
+      margin-top: 16px;
+      overflow-x: auto;
+      white-space: pre;
+      user-select: all;
+    }
+
     #tooltip {
       position: fixed;
       background: #16213e;
@@ -223,21 +238,32 @@
         </label>
       </div>
     </div>
+
+    <div class="control-group">
+      <label>Ordering</label>
+      <div class="toggle-group">
+        <button class="toggle-btn active" id="btn-monotonic" onclick="setOrdering('monotonic')">Monotonic</button>
+        <button class="toggle-btn" id="btn-free" onclick="setOrdering('free')">Free</button>
+      </div>
+    </div>
   </div>
 
   <canvas id="grid-canvas"></canvas>
   <div id="legend"></div>
+  <pre id="text-output"></pre>
   <div id="tooltip"></div>
 
+  <script src="circle.js"></script>
   <script>
-    const BLOCK_TYPES = {
-      flat:    { name: 'Flat',  dx: 1, dy: 0, angle: 0,                    color: '#4a9eff' },
-      slope45: { name: '45°',   dx: 1, dy: 1, angle: Math.PI / 4,          color: '#e94560' },
-      slope2:  { name: '1:2',   dx: 1, dy: 2, angle: Math.atan2(1, 2),     color: '#f5a623' },
-      slope3:  { name: '1:3',   dx: 1, dy: 3, angle: Math.atan2(1, 3),     color: '#7ed321' },
-      slope4:  { name: '1:4',   dx: 1, dy: 4, angle: Math.atan2(1, 4),     color: '#bd10e0' },
-      slope5:  { name: '1:5',   dx: 1, dy: 5, angle: Math.atan2(1, 5),     color: '#50e3c2' },
-      slope6:  { name: '1:6',   dx: 1, dy: 6, angle: Math.atan2(1, 6),     color: '#ff6b6b' },
+    // Color mapping for block types (circle.js BLOCK_TYPES only has name, dx, dy)
+    const BLOCK_COLORS = {
+      flat:    '#4a9eff',
+      slope45: '#e94560',
+      slope2:  '#f5a623',
+      slope3:  '#7ed321',
+      slope4:  '#bd10e0',
+      slope5:  '#50e3c2',
+      slope6:  '#ff6b6b',
     };
 
     const state = {
@@ -245,6 +271,7 @@
       height: 20,
       mode: 'external',
       enabledBlocks: new Set(['flat', 'slope45', 'slope2']),
+      ordering: 'monotonic',
       grid: [],
       hoverCell: null,
     };
@@ -253,6 +280,13 @@
       state.mode = mode;
       document.getElementById('btn-internal').classList.toggle('active', mode === 'internal');
       document.getElementById('btn-external').classList.toggle('active', mode === 'external');
+      recalculate();
+    }
+
+    function setOrdering(ordering) {
+      state.ordering = ordering;
+      document.getElementById('btn-monotonic').classList.toggle('active', ordering === 'monotonic');
+      document.getElementById('btn-free').classList.toggle('active', ordering === 'free');
       recalculate();
     }
 
@@ -265,14 +299,15 @@
       recalculate();
     }
 
-    function getEnabledBlocks() {
-      return Object.entries(BLOCK_TYPES)
-        .filter(([key]) => state.enabledBlocks.has(key))
-        .map(([key, block]) => ({ key, ...block }));
-    }
-
     function recalculate() {
-      computeCircle();
+      const result = computeCircle({
+        width: state.width,
+        height: state.height,
+        mode: state.mode,
+        enabledBlocks: state.enabledBlocks,
+        ordering: state.ordering,
+      });
+      state.grid = result.grid;
       render();
     }
 
@@ -280,200 +315,12 @@
       return Math.max(4, Math.min(30, Math.floor(600 / Math.max(state.width, state.height))));
     }
 
-    function computeCircle() {
-      const w = state.width;
-      const h = state.height;
-
-      // Initialize grid[y][x] = null
-      const grid = [];
-      for (let y = 0; y < h; y++) {
-        grid[y] = new Array(w).fill(null);
-      }
-
-      if (w < 3 || h < 3) {
-        state.grid = grid;
-        return;
-      }
-
-      // Radii: for external mode, blocks sit outside the ellipse boundary
-      // For internal mode, blocks sit inside
-      const cx = w / 2;
-      const cy = h / 2;
-      const rx = cx; // half-width in grid units
-      const ry = cy; // half-height in grid units
-
-      const blocks = getEnabledBlocks();
-      const segments = computeQuadrant(rx, ry, blocks);
-      placeQuadrant(grid, segments, cx, cy, w, h, state.mode);
-
-      state.grid = grid;
-    }
-
-    function computeQuadrant(rx, ry, blocks) {
-      // Phase 1: Generate the perimeter cells by sampling the actual ellipse.
-      // For each row, find the boundary column. For each column, find the boundary row.
-      // Union gives us a complete, connected, symmetric outline.
-      const maxX = Math.ceil(rx);
-      const maxY = Math.ceil(ry);
-      const cells = new Map();
-
-      function addCell(x, y) {
-        if (x >= 0 && x < maxX && y >= 0 && y < maxY) {
-          cells.set(y * maxX + x, { x, y });
-        }
-      }
-
-      // Row pass: for each row qy, find the rightmost boundary column
-      for (let qy = 0; qy < maxY; qy++) {
-        const Y = ry - qy - 0.5; // standard Y (up from center) at cell center
-        if (Y < 0) continue;
-        const X = rx * Math.sqrt(Math.max(0, 1 - (Y * Y) / (ry * ry)));
-        addCell(Math.floor(X), qy);
-      }
-
-      // Column pass: for each column qx, find the topmost boundary row
-      for (let qx = 0; qx < maxX; qx++) {
-        const X = qx + 0.5; // standard X at cell center
-        if (X > rx) continue;
-        const Y = ry * Math.sqrt(Math.max(0, 1 - (X * X) / (rx * rx)));
-        addCell(qx, Math.floor(ry - Y));
-      }
-
-      // Sort cells into a connected path (by y then x)
-      const path = Array.from(cells.values()).sort((a, b) => a.y !== b.y ? a.y - b.y : a.x - b.x);
-
-      // Phase 2: Fit blocks to the path
-      return fitBlocksToPath(path, blocks);
-    }
-
-    function fitBlocksToPath(path, blocks) {
-      // Build available slope patterns from enabled blocks.
-      // Each pattern: { dx, dy, blockKey } — the step from one cell to the next.
-      // A 1:2 slope = 2 horizontal + 1 vertical (or 1h + 2v for steep).
-      // We match runs of cells to find the best fitting block.
-      const segments = [];
-
-      // Build slope ratios: for each enabled slope, record its run:rise ratio
-      const slopes = [];
-      for (const block of blocks) {
-        if (block.key === 'flat') continue;
-        const n = block.dy;
-        if (n === 1) {
-          slopes.push({ run: 1, rise: 1, blockKey: block.key });
-        } else {
-          slopes.push({ run: n, rise: 1, blockKey: block.key }); // shallow
-          slopes.push({ run: 1, rise: n, blockKey: block.key }); // steep
-        }
-      }
-      // Sort by total size descending (prefer larger blocks)
-      slopes.sort((a, b) => (b.run + b.rise) - (a.run + a.rise));
-
-      let i = 0;
-      while (i < path.length) {
-        let matched = false;
-
-        // Try to match a slope block starting at this cell
-        for (const slope of slopes) {
-          const needed = slope.run + slope.rise - 1; // cells this slope spans in the path
-          if (i + needed > path.length) continue;
-
-          // Check if the next 'needed' cells match this slope's pattern
-          // A slope with run=R, rise=S means: R cells going right, then S cells going down
-          // (or interleaved for the actual staircase path)
-          const startCell = path[i];
-          const endIdx = i + needed - 1;
-          const endCell = path[endIdx];
-          const totalDx = endCell.x - startCell.x;
-          const totalDy = endCell.y - startCell.y;
-
-          if (totalDx === slope.run - 1 && totalDy === slope.rise - 1) {
-            // This run of cells matches the slope's dimensions
-            // Place as a single slope block
-            segments.push({
-              x: startCell.x,
-              y: startCell.y,
-              dx: slope.run,
-              dy: slope.rise,
-              blockKey: slope.blockKey
-            });
-            i += needed;
-            matched = true;
-            break;
-          }
-        }
-
-        if (!matched) {
-          // Place as flat block
-          segments.push({
-            x: path[i].x,
-            y: path[i].y,
-            dx: 1,
-            dy: 1,
-            blockKey: 'flat'
-          });
-          i++;
-        }
-      }
-
-      return segments;
-    }
-
-    function getSegmentCells(seg) {
-      const cells = [];
-      for (let ix = 0; ix < seg.dx; ix++) {
-        for (let iy = 0; iy < seg.dy; iy++) {
-          cells.push({ x: seg.x + ix, y: seg.y + iy });
-        }
-      }
-      return cells;
-    }
-
-    function mirrorPositions(qx, qy, cx, cy, w, h) {
-      const results = new Map(); // key -> {gx, gy, rotation}
-      const floorCx = Math.floor(cx);
-      const ceilCx = Math.ceil(cx);
-
-      // Top-right quadrant (rotation 0)
-      const tr = { gx: floorCx + qx, gy: qy, rotation: 0 };
-      // Top-left quadrant (rotation 1)
-      const tl = { gx: ceilCx - 1 - qx, gy: qy, rotation: 1 };
-      // Bottom-right quadrant (rotation 2)
-      const br = { gx: floorCx + qx, gy: h - 1 - qy, rotation: 2 };
-      // Bottom-left quadrant (rotation 3)
-      const bl = { gx: ceilCx - 1 - qx, gy: h - 1 - qy, rotation: 3 };
-
-      const positions = [tr, tl, br, bl];
-      for (const pos of positions) {
-        if (pos.gx >= 0 && pos.gx < w && pos.gy >= 0 && pos.gy < h) {
-          const key = pos.gy * w + pos.gx;
-          if (!results.has(key)) {
-            results.set(key, pos);
-          }
-        }
-      }
-
-      return Array.from(results.values());
-    }
-
-    function placeQuadrant(grid, segments, cx, cy, w, h, mode) {
-      // External: slope faces outward, solid fills inward (default arc position)
-      // Internal: slope faces inward, solid fills outward (shift blocks outward by 1)
-      const offset = mode === 'internal' ? -1 : 0;
-
-      for (const seg of segments) {
-        const cells = getSegmentCells(seg);
-        for (const cell of cells) {
-          // Apply offset: shift cells away from center for internal mode
-          const ox = cell.x;
-          const oy = cell.y + offset;
-          if (oy < 0) continue;
-          const mirrors = mirrorPositions(ox, oy, cx, cy, w, h);
-          for (const m of mirrors) {
-            if (grid[m.gy] && grid[m.gy][m.gx] === null) {
-              grid[m.gy][m.gx] = { type: seg.blockKey, rotation: m.rotation };
-            }
-          }
-        }
+    function applyRotation(p, rotation, cs) {
+      switch (rotation) {
+        case 0: return p;
+        case 1: return { x: cs - p.x, y: p.y };
+        case 2: return { x: p.x, y: cs - p.y };
+        case 3: return { x: cs - p.x, y: cs - p.y };
       }
     }
 
@@ -495,54 +342,84 @@
       const ctx = canvas.getContext('2d');
       const w = state.width;
       const h = state.height;
+      const isInternal = state.mode === 'internal';
+      const pad = isInternal ? 1 : 0;
 
       const cellSize = getCellSize();
-      canvas.width = w * cellSize;
-      canvas.height = h * cellSize;
+      canvas.width = (w + 2 * pad) * cellSize;
+      canvas.height = (h + 2 * pad) * cellSize;
 
       // Background
       ctx.fillStyle = '#0d1117';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      // Draw cells
-      for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-          const cell = state.grid[y] && state.grid[y][x];
+      // Draw grid cells (with padding offset)
+      for (let y = -pad; y < h + pad; y++) {
+        for (let x = -pad; x < w + pad; x++) {
+          const cell = (y >= 0 && y < h && x >= 0 && x < w) ? state.grid[y] && state.grid[y][x] : null;
           const isHovered = state.hoverCell && state.hoverCell.x === x && state.hoverCell.y === y;
-          const px = x * cellSize;
-          const py = y * cellSize;
+          const px = (x + pad) * cellSize;
+          const py = (y + pad) * cellSize;
           const cs = cellSize - 1;
 
           if (cell) {
-            const blockType = BLOCK_TYPES[cell.type];
-            const baseColor = blockType ? blockType.color : '#666';
-            ctx.fillStyle = isHovered ? lightenColor(baseColor, 0.3) : baseColor;
-            ctx.fillRect(px, py, cs, cs);
+            const baseColor = BLOCK_COLORS[cell.type] || '#666';
+            const color = isHovered ? lightenColor(baseColor, 0.3) : baseColor;
 
-            // Draw slope indicator for non-flat blocks
-            if (cell.type !== 'flat' && cellSize >= 6) {
-              ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-              ctx.lineWidth = 1;
+            if (cell.type === 'flat') {
+              // Flat blocks always fill the entire cell solid
+              ctx.fillStyle = color;
+              ctx.fillRect(px, py, cs, cs);
+            } else {
+              // Slope block: draw empty background, then fill the slope polygon.
+              // The slope line goes from corner (0,0) to corner (cs,cs) in unrotated
+              // cell-local space, then applyRotation transforms it to the correct quadrant.
+              ctx.fillStyle = isHovered ? '#333' : '#222';
+              ctx.fillRect(px, py, cs, cs);
+
+              // Unrotated slope line: (0,0) to (cs,cs)
+              const lp = [{ x: 0, y: 0 }, { x: cs, y: cs }];
+
+              // Determine fill side:
+              // External mode fills the outer half (below the diagonal in unrotated space).
+              // Internal mode fills the inner half (above the diagonal in unrotated space).
+              // In unrotated space: "above" means y < line_y, "below" means y > line_y.
+              // The line is y=x, so above = y < x, below = y > x.
+              const fillBelow = state.mode === 'external';
+
+              const corners = [{ x: 0, y: 0 }, { x: cs, y: 0 }, { x: cs, y: cs }, { x: 0, y: cs }];
+              const fillCorners = corners.filter(c => {
+                // line is y=x in unrotated space; corners on the fill side
+                if (fillBelow) return c.y > c.x + 0.01;
+                else return c.y < c.x - 0.01;
+              });
+
+              // Build convex polygon from line endpoints + fill corners
+              const poly = [...lp, ...fillCorners];
+              const centX = poly.reduce((s, p) => s + p.x, 0) / poly.length;
+              const centY = poly.reduce((s, p) => s + p.y, 0) / poly.length;
+              poly.sort((a, b) => Math.atan2(a.y - centY, a.x - centX) - Math.atan2(b.y - centY, b.x - centX));
+
+              // Apply rotation and draw fill
+              const rPoly = poly.map(p => applyRotation(p, cell.rotation, cs));
+              ctx.fillStyle = color;
               ctx.beginPath();
-              // rotation 0: bottom-left to top-right
-              // rotation 1: bottom-right to top-left
-              // rotation 2: top-left to bottom-right
-              // rotation 3: top-right to bottom-left
-              const r = cell.rotation;
-              if (r === 0) {
-                ctx.moveTo(px, py + cs);
-                ctx.lineTo(px + cs, py);
-              } else if (r === 1) {
-                ctx.moveTo(px + cs, py + cs);
-                ctx.lineTo(px, py);
-              } else if (r === 2) {
-                ctx.moveTo(px, py);
-                ctx.lineTo(px + cs, py + cs);
-              } else {
-                ctx.moveTo(px + cs, py);
-                ctx.lineTo(px, py + cs);
+              ctx.moveTo(px + rPoly[0].x, py + rPoly[0].y);
+              for (let i = 1; i < rPoly.length; i++)
+                ctx.lineTo(px + rPoly[i].x, py + rPoly[i].y);
+              ctx.closePath();
+              ctx.fill();
+
+              // Draw slope line
+              if (cs >= 6) {
+                const rl = lp.map(p => applyRotation(p, cell.rotation, cs));
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(px + rl[0].x, py + rl[0].y);
+                ctx.lineTo(px + rl[1].x, py + rl[1].y);
+                ctx.stroke();
               }
-              ctx.stroke();
             }
           } else {
             ctx.fillStyle = isHovered ? '#333' : '#222';
@@ -550,6 +427,19 @@
           }
         }
       }
+
+      // Text output
+      const CHAR_MAP = { flat: '#', slope45: '/', slope2: '/', slope3: '/', slope4: '/', slope5: '/', slope6: '/' };
+      let text = '';
+      for (let y = 0; y < h; y++) {
+        let row = '';
+        for (let x = 0; x < w; x++) {
+          const cell = state.grid[y] && state.grid[y][x];
+          row += cell ? (CHAR_MAP[cell.type] || '#') : '.';
+        }
+        text += row + '\n';
+      }
+      document.getElementById('text-output').textContent = text;
     }
 
     function getCellFromMouse(e) {
@@ -601,13 +491,13 @@
     function buildLegend() {
       const legend = document.getElementById('legend');
       legend.innerHTML = '';
-      for (const [, block] of Object.entries(BLOCK_TYPES)) {
+      for (const [key, block] of Object.entries(BLOCK_TYPES)) {
         const item = document.createElement('div');
         item.className = 'legend-item';
 
         const swatch = document.createElement('div');
         swatch.className = 'legend-swatch';
-        swatch.style.background = block.color;
+        swatch.style.background = BLOCK_COLORS[key] || '#666';
 
         const label = document.createElement('span');
         label.textContent = block.name;
