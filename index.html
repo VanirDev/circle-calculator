@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SE Circle Calculator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after {
       box-sizing: border-box;
@@ -11,233 +14,636 @@
       padding: 0;
     }
 
+    :root {
+      --bg-deep: #080c14;
+      --bg-panel: #0c1220;
+      --bg-inset: #060a12;
+      --border-dim: #1a2a40;
+      --border-mid: #1e3a5c;
+      --border-bright: #2a5a8a;
+      --cyan: #00c8ff;
+      --cyan-dim: #0088aa;
+      --cyan-glow: rgba(0, 200, 255, 0.15);
+      --amber: #f0a830;
+      --amber-dim: #806020;
+      --text-primary: #c8dae8;
+      --text-secondary: #607890;
+      --text-label: #4a6a88;
+      --block-flat: #3a8cd0;
+      --block-45: #d04858;
+      --block-12: #d09030;
+      --block-13: #40a848;
+      --block-14: #9040b0;
+      --block-15: #30b0a0;
+      --block-16: #c05068;
+    }
+
     body {
-      background: #1a1a2e;
-      color: #cdd6f4;
-      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-deep);
+      color: var(--text-primary);
+      font-family: 'Chakra Petch', sans-serif;
       min-height: 100vh;
-      padding: 16px;
+      overflow-x: hidden;
     }
 
-    h1 {
-      font-size: 1.6rem;
-      margin-bottom: 16px;
-      color: #e2e8f0;
+    /* Blueprint grid background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        linear-gradient(var(--border-dim) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border-dim) 1px, transparent 1px);
+      background-size: 40px 40px;
+      opacity: 0.15;
+      pointer-events: none;
+      z-index: 0;
     }
 
-    #controls {
-      background: #16213e;
-      border-radius: 8px;
-      padding: 16px;
+    /* Scanline overlay */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0, 200, 255, 0.008) 2px,
+        rgba(0, 200, 255, 0.008) 4px
+      );
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    .app {
+      position: relative;
+      z-index: 1;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 24px 20px;
+    }
+
+    /* Header */
+    .header {
       display: flex;
-      flex-wrap: wrap;
-      gap: 16px;
-      align-items: flex-start;
-      margin-bottom: 16px;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 28px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border-dim);
     }
 
-    .control-group {
+    .header h1 {
+      font-family: 'Chakra Petch', sans-serif;
+      font-weight: 700;
+      font-size: 1.5rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--cyan);
+      text-shadow: 0 0 20px rgba(0, 200, 255, 0.3);
+    }
+
+    .header .tag {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      letter-spacing: 0.08em;
+      padding: 2px 8px;
+      border: 1px solid var(--border-dim);
+      border-radius: 2px;
+    }
+
+    /* Layout */
+    .layout {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+
+    @media (max-width: 800px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Sidebar panels */
+    .sidebar {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 2px;
     }
 
-    .control-group label {
-      font-size: 0.8rem;
-      color: #94a3b8;
+    .panel {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-dim);
+      overflow: hidden;
+    }
+
+    .panel:first-child {
+      border-radius: 4px 4px 0 0;
+    }
+
+    .panel:last-child {
+      border-radius: 0 0 4px 4px;
+    }
+
+    .panel-header {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.65rem;
+      letter-spacing: 0.15em;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
-    input[type="number"] {
-      background: #0f3460;
-      border: 1px solid #334155;
-      border-radius: 4px;
-      color: #e2e8f0;
-      font-size: 1rem;
-      padding: 6px 10px;
-      width: 80px;
-      outline: none;
-    }
-
-    input[type="number"]:focus {
-      border-color: #e94560;
-    }
-
-    .toggle-group {
+      color: var(--text-label);
+      padding: 10px 14px 6px;
+      border-bottom: 1px solid var(--border-dim);
       display: flex;
-      gap: 6px;
-    }
-
-    .toggle-btn {
-      background: #0f3460;
-      border: 1px solid #334155;
-      border-radius: 4px;
-      color: #aaa;
-      cursor: pointer;
-      font-size: 0.9rem;
-      padding: 6px 14px;
-      transition: background 0.15s, color 0.15s;
-    }
-
-    .toggle-btn.active {
-      background: #e94560;
-      border-color: #e94560;
-      color: #fff;
-    }
-
-    .checkbox-group {
-      display: flex;
-      flex-wrap: wrap;
+      align-items: center;
       gap: 8px;
     }
 
-    .checkbox-label {
+    .panel-header::before {
+      content: '▸';
+      color: var(--cyan-dim);
+      font-size: 0.55rem;
+    }
+
+    .panel-body {
+      padding: 12px 14px;
+    }
+
+    /* Dimension inputs */
+    .dim-row {
+      display: flex;
+      gap: 6px;
+      align-items: flex-end;
+    }
+
+    .dim-link {
       display: flex;
       align-items: center;
-      gap: 5px;
-      font-size: 0.9rem;
+      justify-content: center;
+      width: 28px;
+      height: 36px;
+      flex-shrink: 0;
+      cursor: pointer;
+      border: 1px solid var(--border-mid);
+      border-radius: 2px;
+      background: var(--bg-inset);
+      color: var(--text-secondary);
+      transition: all 0.15s;
+      position: relative;
+    }
+
+    .dim-link:hover {
+      border-color: var(--cyan-dim);
+      color: var(--text-primary);
+    }
+
+    .dim-link.active {
+      border-color: var(--cyan-dim);
+      background: rgba(0, 200, 255, 0.1);
+      color: var(--cyan);
+      box-shadow: inset 0 0 8px var(--cyan-glow);
+    }
+
+    .dim-link svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    .dim-field {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .dim-field label {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.6rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+    }
+
+    input[type="number"] {
+      background: var(--bg-inset);
+      border: 1px solid var(--border-mid);
+      border-radius: 2px;
+      color: var(--cyan);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 1rem;
+      padding: 8px 10px;
+      width: 100%;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input[type="number"]:focus {
+      border-color: var(--cyan);
+      box-shadow: 0 0 8px var(--cyan-glow), inset 0 0 8px var(--cyan-glow);
+    }
+
+    input[type="number"]::-webkit-inner-spin-button {
+      opacity: 0.5;
+    }
+
+    .dim-display {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      text-align: center;
+      padding-top: 8px;
+      letter-spacing: 0.05em;
+    }
+
+    .dim-display span {
+      color: var(--amber);
+    }
+
+    /* Toggle buttons */
+    .toggle-group {
+      display: flex;
+      gap: 0;
+    }
+
+    .toggle-btn {
+      flex: 1;
+      background: var(--bg-inset);
+      border: 1px solid var(--border-mid);
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.75rem;
+      letter-spacing: 0.06em;
+      padding: 8px 12px;
+      transition: all 0.15s;
+      text-transform: uppercase;
+    }
+
+    .toggle-btn:first-child {
+      border-radius: 2px 0 0 2px;
+    }
+
+    .toggle-btn:last-child {
+      border-radius: 0 2px 2px 0;
+      border-left: none;
+    }
+
+    .toggle-btn:hover:not(.active) {
+      background: rgba(0, 200, 255, 0.05);
+      color: var(--text-primary);
+    }
+
+    .toggle-btn.active {
+      background: rgba(0, 200, 255, 0.12);
+      border-color: var(--cyan-dim);
+      color: var(--cyan);
+      box-shadow: inset 0 0 12px var(--cyan-glow);
+    }
+
+    /* Block type checkboxes */
+    .block-list {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .block-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 8px;
+      border-radius: 2px;
       cursor: pointer;
       user-select: none;
+      transition: background 0.12s;
     }
 
-    .checkbox-label input[type="checkbox"] {
-      accent-color: #e94560;
+    .block-item:hover {
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .block-check {
+      position: relative;
+      width: 14px;
+      height: 14px;
+      flex-shrink: 0;
+    }
+
+    .block-check input {
+      position: absolute;
+      opacity: 0;
+      width: 100%;
+      height: 100%;
       cursor: pointer;
-      width: 15px;
-      height: 15px;
+      margin: 0;
     }
 
-    .checkbox-label input[type="checkbox"]:disabled {
-      cursor: not-allowed;
-      opacity: 0.6;
+    .block-check .check-visual {
+      width: 14px;
+      height: 14px;
+      border: 1px solid var(--border-mid);
+      border-radius: 2px;
+      background: var(--bg-inset);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+      pointer-events: none;
     }
+
+    .block-check input:checked + .check-visual {
+      border-color: var(--cyan-dim);
+      background: rgba(0, 200, 255, 0.1);
+    }
+
+    .block-check input:checked + .check-visual::after {
+      content: '✓';
+      font-size: 0.6rem;
+      color: var(--cyan);
+    }
+
+    .block-check input:disabled {
+      cursor: not-allowed;
+    }
+
+    .block-check input:disabled + .check-visual {
+      opacity: 0.5;
+    }
+
+    .block-swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 1px;
+      flex-shrink: 0;
+    }
+
+    .block-name {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--text-primary);
+      letter-spacing: 0.04em;
+    }
+
+    .block-item:has(input:not(:checked)) .block-name {
+      color: var(--text-secondary);
+    }
+
+    /* Main content area */
+    .main {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Canvas wrapper */
+    .canvas-frame {
+      position: relative;
+      background: var(--bg-inset);
+      border: 1px solid var(--border-mid);
+      border-radius: 4px;
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 300px;
+    }
+
+    .canvas-frame::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 4px;
+      background:
+        radial-gradient(ellipse at center, rgba(0, 200, 255, 0.03) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    /* Corner decorations */
+    .canvas-frame .corner {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border-color: var(--cyan-dim);
+      border-style: solid;
+      border-width: 0;
+      opacity: 0.5;
+    }
+    .canvas-frame .corner.tl { top: 6px; left: 6px; border-top-width: 1px; border-left-width: 1px; }
+    .canvas-frame .corner.tr { top: 6px; right: 6px; border-top-width: 1px; border-right-width: 1px; }
+    .canvas-frame .corner.bl { bottom: 6px; left: 6px; border-bottom-width: 1px; border-left-width: 1px; }
+    .canvas-frame .corner.br { bottom: 6px; right: 6px; border-bottom-width: 1px; border-right-width: 1px; }
 
     #grid-canvas {
-      border: 1px solid #334155;
-      border-radius: 4px;
-      cursor: crosshair;
       display: block;
-      background: #0d1117;
+      cursor: crosshair;
+      position: relative;
+      z-index: 1;
     }
 
-    #legend {
-      background: #16213e;
-      border-radius: 8px;
-      padding: 12px 16px;
-      margin-top: 16px;
+    /* Legend bar */
+    .legend-bar {
       display: flex;
       flex-wrap: wrap;
-      gap: 12px;
-      align-items: center;
+      gap: 16px;
+      padding: 10px 14px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-dim);
+      border-radius: 4px;
     }
 
     .legend-item {
       display: flex;
       align-items: center;
       gap: 6px;
-      font-size: 0.85rem;
     }
 
     .legend-swatch {
-      width: 14px;
-      height: 14px;
-      border-radius: 2px;
+      width: 10px;
+      height: 10px;
+      border-radius: 1px;
       flex-shrink: 0;
     }
 
+    .legend-label {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      letter-spacing: 0.04em;
+    }
+
+    /* Block count stats */
+    .stats-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      padding: 10px 14px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-dim);
+      border-radius: 4px;
+    }
+
+    .stat-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .stat-swatch {
+      width: 8px;
+      height: 8px;
+      border-radius: 1px;
+      flex-shrink: 0;
+    }
+
+    .stat-label {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.65rem;
+      color: var(--text-secondary);
+      letter-spacing: 0.04em;
+    }
+
+    .stat-value {
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.7rem;
+      color: var(--cyan);
+      letter-spacing: 0.02em;
+    }
+
+    /* Tooltip */
     #tooltip {
       position: fixed;
-      background: #16213e;
-      border: 1px solid #334155;
-      border-radius: 4px;
-      color: #e2e8f0;
-      font-size: 0.8rem;
-      padding: 6px 10px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-mid);
+      border-radius: 2px;
+      color: var(--cyan);
+      font-family: 'Share Tech Mono', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.06em;
+      padding: 4px 10px;
       pointer-events: none;
       display: none;
-      z-index: 1000;
+      z-index: 10000;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
     }
+
+    /* Animations */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .header { animation: fadeIn 0.4s ease-out; }
+    .sidebar { animation: fadeIn 0.4s ease-out 0.1s both; }
+    .main { animation: fadeIn 0.4s ease-out 0.15s both; }
   </style>
 </head>
 <body>
-  <h1>SE Circle Calculator</h1>
-
-  <div id="controls">
-    <div class="control-group">
-      <label for="width-input">Width</label>
-      <input id="width-input" type="number" min="3" max="200" value="20"
-             oninput="state.width = Math.max(3, Math.min(200, +this.value)); recalculate();" />
+  <div class="app">
+    <div class="header">
+      <h1>Circle Calculator</h1>
+      <span class="tag">Space Engineers</span>
     </div>
 
-    <div class="control-group">
-      <label for="height-input">Height</label>
-      <input id="height-input" type="number" min="3" max="200" value="20"
-             oninput="state.height = Math.max(3, Math.min(200, +this.value)); recalculate();" />
-    </div>
+    <div class="layout">
+      <div class="sidebar">
+        <!-- Dimensions -->
+        <div class="panel">
+          <div class="panel-header">Dimensions</div>
+          <div class="panel-body">
+            <div class="dim-row">
+              <div class="dim-field">
+                <label for="width-input">Width</label>
+                <input id="width-input" type="number" min="3" max="200" value="20"
+                       oninput="onDimInput('width', this.value)" />
+              </div>
+              <button class="dim-link active" id="dim-link-btn" onclick="toggleDimLink()" title="Link dimensions">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                </svg>
+              </button>
+              <div class="dim-field">
+                <label for="height-input">Height</label>
+                <input id="height-input" type="number" min="3" max="200" value="20"
+                       oninput="onDimInput('height', this.value)" />
+              </div>
+            </div>
+            <div class="dim-display" id="dim-info"></div>
+          </div>
+        </div>
 
-    <div class="control-group">
-      <label>Mode</label>
-      <div class="toggle-group">
-        <button class="toggle-btn" id="btn-internal" onclick="setMode('internal')">Internal</button>
-        <button class="toggle-btn active" id="btn-external" onclick="setMode('external')">External</button>
+        <!-- Mode -->
+        <div class="panel">
+          <div class="panel-header">Surface Mode</div>
+          <div class="panel-body">
+            <div class="toggle-group">
+              <button class="toggle-btn" id="btn-internal" onclick="setMode('internal')">Internal</button>
+              <button class="toggle-btn active" id="btn-external" onclick="setMode('external')">External</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ordering -->
+        <div class="panel">
+          <div class="panel-header">Ordering</div>
+          <div class="panel-body">
+            <div class="toggle-group">
+              <button class="toggle-btn active" id="btn-monotonic" onclick="setOrdering('monotonic')">Monotonic</button>
+              <button class="toggle-btn" id="btn-free" onclick="setOrdering('free')">Free</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Block Types -->
+        <div class="panel">
+          <div class="panel-header">Block Types</div>
+          <div class="panel-body">
+            <div class="block-list" id="block-list"></div>
+          </div>
+        </div>
       </div>
-    </div>
 
-    <div class="control-group">
-      <label>Block Types</label>
-      <div class="checkbox-group" id="block-checkboxes">
-        <label class="checkbox-label">
-          <input type="checkbox" value="flat" checked disabled />
-          Flat
-        </label>
-        <label class="checkbox-label">
-          <input type="checkbox" value="slope45" checked
-                 onchange="toggleBlock('slope45', this.checked)" />
-          45°
-        </label>
-        <label class="checkbox-label">
-          <input type="checkbox" value="slope2" checked
-                 onchange="toggleBlock('slope2', this.checked)" />
-          1:2
-        </label>
-        <label class="checkbox-label">
-          <input type="checkbox" value="slope3"
-                 onchange="toggleBlock('slope3', this.checked)" />
-          1:3
-        </label>
-        <label class="checkbox-label">
-          <input type="checkbox" value="slope4"
-                 onchange="toggleBlock('slope4', this.checked)" />
-          1:4
-        </label>
-        <label class="checkbox-label">
-          <input type="checkbox" value="slope5"
-                 onchange="toggleBlock('slope5', this.checked)" />
-          1:5
-        </label>
-        <label class="checkbox-label">
-          <input type="checkbox" value="slope6"
-                 onchange="toggleBlock('slope6', this.checked)" />
-          1:6
-        </label>
+      <div class="main">
+        <div class="canvas-frame">
+          <div class="corner tl"></div>
+          <div class="corner tr"></div>
+          <div class="corner bl"></div>
+          <div class="corner br"></div>
+          <canvas id="grid-canvas"></canvas>
+        </div>
+
+        <div class="stats-bar" id="stats-bar"></div>
+
+        <div class="legend-bar" id="legend"></div>
       </div>
     </div>
   </div>
 
-  <canvas id="grid-canvas"></canvas>
-  <div id="legend"></div>
   <div id="tooltip"></div>
 
+  <script src="circle.js"></script>
   <script>
-    const BLOCK_TYPES = {
-      flat:    { name: 'Flat',  dx: 1, dy: 0, angle: 0,                    color: '#4a9eff' },
-      slope45: { name: '45°',   dx: 1, dy: 1, angle: Math.PI / 4,          color: '#e94560' },
-      slope2:  { name: '1:2',   dx: 1, dy: 2, angle: Math.atan2(1, 2),     color: '#f5a623' },
-      slope3:  { name: '1:3',   dx: 1, dy: 3, angle: Math.atan2(1, 3),     color: '#7ed321' },
-      slope4:  { name: '1:4',   dx: 1, dy: 4, angle: Math.atan2(1, 4),     color: '#bd10e0' },
-      slope5:  { name: '1:5',   dx: 1, dy: 5, angle: Math.atan2(1, 5),     color: '#50e3c2' },
-      slope6:  { name: '1:6',   dx: 1, dy: 6, angle: Math.atan2(1, 6),     color: '#ff6b6b' },
+    const BLOCK_COLORS = {
+      flat:    '#3a8cd0',
+      slope45: '#d04858',
+      slope2:  '#d09030',
+      slope3:  '#40a848',
+      slope4:  '#9040b0',
+      slope5:  '#30b0a0',
+      slope6:  '#c05068',
+    };
+
+    const BLOCK_LABELS = {
+      flat: 'Flat',
+      slope45: '45°',
+      slope2: '1:2',
+      slope3: '1:3',
+      slope4: '1:4',
+      slope5: '1:5',
+      slope6: '1:6',
     };
 
     const state = {
@@ -245,14 +651,48 @@
       height: 20,
       mode: 'external',
       enabledBlocks: new Set(['flat', 'slope45', 'slope2']),
+      ordering: 'monotonic',
       grid: [],
       hoverCell: null,
+      dimsLinked: true,
     };
+
+    function toggleDimLink() {
+      state.dimsLinked = !state.dimsLinked;
+      document.getElementById('dim-link-btn').classList.toggle('active', state.dimsLinked);
+      if (state.dimsLinked) {
+        // Sync height to width
+        state.height = state.width;
+        document.getElementById('height-input').value = state.width;
+        recalculate();
+      }
+    }
+
+    function onDimInput(which, rawValue) {
+      const val = Math.max(3, Math.min(200, +rawValue));
+      if (state.dimsLinked) {
+        state.width = val;
+        state.height = val;
+        document.getElementById('width-input').value = val;
+        document.getElementById('height-input').value = val;
+      } else {
+        if (which === 'width') state.width = val;
+        else state.height = val;
+      }
+      recalculate();
+    }
 
     function setMode(mode) {
       state.mode = mode;
       document.getElementById('btn-internal').classList.toggle('active', mode === 'internal');
       document.getElementById('btn-external').classList.toggle('active', mode === 'external');
+      recalculate();
+    }
+
+    function setOrdering(ordering) {
+      state.ordering = ordering;
+      document.getElementById('btn-monotonic').classList.toggle('active', ordering === 'monotonic');
+      document.getElementById('btn-free').classList.toggle('active', ordering === 'free');
       recalculate();
     }
 
@@ -265,229 +705,118 @@
       recalculate();
     }
 
-    function getEnabledBlocks() {
-      return Object.entries(BLOCK_TYPES)
-        .filter(([key]) => state.enabledBlocks.has(key))
-        .map(([key, block]) => ({ key, ...block }));
-    }
-
     function recalculate() {
-      computeCircle();
+      const result = computeCircle({
+        width: state.width,
+        height: state.height,
+        mode: state.mode,
+        enabledBlocks: state.enabledBlocks,
+        ordering: state.ordering,
+      });
+      state.grid = result.grid;
+
+      // Debug text output → console
+      const CHAR_MAP = { flat: '#', slope45: '/', slope2: '2', slope3: '3', slope4: '4', slope5: '5', slope6: '6' };
+      let text = '';
+      for (let y = 0; y < state.height; y++) {
+        let row = '';
+        for (let x = 0; x < state.width; x++) {
+          const cell = state.grid[y] && state.grid[y][x];
+          row += cell ? (CHAR_MAP[cell.type] || '#') : '.';
+        }
+        text += row + '\n';
+      }
+      console.log(text);
+
+      updateDimInfo();
+      updateStats();
       render();
     }
 
-    function getCellSize() {
-      return Math.max(4, Math.min(30, Math.floor(600 / Math.max(state.width, state.height))));
+    function updateDimInfo() {
+      const el = document.getElementById('dim-info');
+      const shape = state.width === state.height ? 'Circle' : 'Ellipse';
+      el.innerHTML = `<span>${state.width}</span> × <span>${state.height}</span> — ${shape}`;
     }
 
-    function computeCircle() {
+    function updateStats() {
       const w = state.width;
       const h = state.height;
-
-      // Initialize grid[y][x] = null
-      const grid = [];
+      const counts = {};
+      let total = 0;
       for (let y = 0; y < h; y++) {
-        grid[y] = new Array(w).fill(null);
-      }
-
-      if (w < 3 || h < 3) {
-        state.grid = grid;
-        return;
-      }
-
-      // Radii: for external mode, blocks sit outside the ellipse boundary
-      // For internal mode, blocks sit inside
-      const cx = w / 2;
-      const cy = h / 2;
-      const rx = cx; // half-width in grid units
-      const ry = cy; // half-height in grid units
-
-      const blocks = getEnabledBlocks();
-      const segments = computeQuadrant(rx, ry, blocks);
-      placeQuadrant(grid, segments, cx, cy, w, h, state.mode);
-
-      state.grid = grid;
-    }
-
-    function computeQuadrant(rx, ry, blocks) {
-      // Phase 1: Generate the perimeter cells by sampling the actual ellipse.
-      // For each row, find the boundary column. For each column, find the boundary row.
-      // Union gives us a complete, connected, symmetric outline.
-      const maxX = Math.ceil(rx);
-      const maxY = Math.ceil(ry);
-      const cells = new Map();
-
-      function addCell(x, y) {
-        if (x >= 0 && x < maxX && y >= 0 && y < maxY) {
-          cells.set(y * maxX + x, { x, y });
-        }
-      }
-
-      // Row pass: for each row qy, find the rightmost boundary column
-      for (let qy = 0; qy < maxY; qy++) {
-        const Y = ry - qy - 0.5; // standard Y (up from center) at cell center
-        if (Y < 0) continue;
-        const X = rx * Math.sqrt(Math.max(0, 1 - (Y * Y) / (ry * ry)));
-        addCell(Math.floor(X), qy);
-      }
-
-      // Column pass: for each column qx, find the topmost boundary row
-      for (let qx = 0; qx < maxX; qx++) {
-        const X = qx + 0.5; // standard X at cell center
-        if (X > rx) continue;
-        const Y = ry * Math.sqrt(Math.max(0, 1 - (X * X) / (rx * rx)));
-        addCell(qx, Math.floor(ry - Y));
-      }
-
-      // Sort cells into a connected path (by y then x)
-      const path = Array.from(cells.values()).sort((a, b) => a.y !== b.y ? a.y - b.y : a.x - b.x);
-
-      // Phase 2: Fit blocks to the path
-      return fitBlocksToPath(path, blocks);
-    }
-
-    function fitBlocksToPath(path, blocks) {
-      // Build available slope patterns from enabled blocks.
-      // Each pattern: { dx, dy, blockKey } — the step from one cell to the next.
-      // A 1:2 slope = 2 horizontal + 1 vertical (or 1h + 2v for steep).
-      // We match runs of cells to find the best fitting block.
-      const segments = [];
-
-      // Build slope ratios: for each enabled slope, record its run:rise ratio
-      const slopes = [];
-      for (const block of blocks) {
-        if (block.key === 'flat') continue;
-        const n = block.dy;
-        if (n === 1) {
-          slopes.push({ run: 1, rise: 1, blockKey: block.key });
-        } else {
-          slopes.push({ run: n, rise: 1, blockKey: block.key }); // shallow
-          slopes.push({ run: 1, rise: n, blockKey: block.key }); // steep
-        }
-      }
-      // Sort by total size descending (prefer larger blocks)
-      slopes.sort((a, b) => (b.run + b.rise) - (a.run + a.rise));
-
-      let i = 0;
-      while (i < path.length) {
-        let matched = false;
-
-        // Try to match a slope block starting at this cell
-        for (const slope of slopes) {
-          const needed = slope.run + slope.rise - 1; // cells this slope spans in the path
-          if (i + needed > path.length) continue;
-
-          // Check if the next 'needed' cells match this slope's pattern
-          // A slope with run=R, rise=S means: R cells going right, then S cells going down
-          // (or interleaved for the actual staircase path)
-          const startCell = path[i];
-          const endIdx = i + needed - 1;
-          const endCell = path[endIdx];
-          const totalDx = endCell.x - startCell.x;
-          const totalDy = endCell.y - startCell.y;
-
-          if (totalDx === slope.run - 1 && totalDy === slope.rise - 1) {
-            // This run of cells matches the slope's dimensions
-            // Place as a single slope block
-            segments.push({
-              x: startCell.x,
-              y: startCell.y,
-              dx: slope.run,
-              dy: slope.rise,
-              blockKey: slope.blockKey
-            });
-            i += needed;
-            matched = true;
-            break;
-          }
-        }
-
-        if (!matched) {
-          // Place as flat block
-          segments.push({
-            x: path[i].x,
-            y: path[i].y,
-            dx: 1,
-            dy: 1,
-            blockKey: 'flat'
-          });
-          i++;
-        }
-      }
-
-      return segments;
-    }
-
-    function getSegmentCells(seg) {
-      const cells = [];
-      for (let ix = 0; ix < seg.dx; ix++) {
-        for (let iy = 0; iy < seg.dy; iy++) {
-          cells.push({ x: seg.x + ix, y: seg.y + iy });
-        }
-      }
-      return cells;
-    }
-
-    function mirrorPositions(qx, qy, cx, cy, w, h) {
-      const results = new Map(); // key -> {gx, gy, rotation}
-      const floorCx = Math.floor(cx);
-      const ceilCx = Math.ceil(cx);
-
-      // Top-right quadrant (rotation 0)
-      const tr = { gx: floorCx + qx, gy: qy, rotation: 0 };
-      // Top-left quadrant (rotation 1)
-      const tl = { gx: ceilCx - 1 - qx, gy: qy, rotation: 1 };
-      // Bottom-right quadrant (rotation 2)
-      const br = { gx: floorCx + qx, gy: h - 1 - qy, rotation: 2 };
-      // Bottom-left quadrant (rotation 3)
-      const bl = { gx: ceilCx - 1 - qx, gy: h - 1 - qy, rotation: 3 };
-
-      const positions = [tr, tl, br, bl];
-      for (const pos of positions) {
-        if (pos.gx >= 0 && pos.gx < w && pos.gy >= 0 && pos.gy < h) {
-          const key = pos.gy * w + pos.gx;
-          if (!results.has(key)) {
-            results.set(key, pos);
+        for (let x = 0; x < w; x++) {
+          const cell = state.grid[y] && state.grid[y][x];
+          if (cell) {
+            counts[cell.type] = (counts[cell.type] || 0) + 1;
+            total++;
           }
         }
       }
 
-      return Array.from(results.values());
+      const bar = document.getElementById('stats-bar');
+      bar.innerHTML = '';
+
+      const totalEl = document.createElement('div');
+      totalEl.className = 'stat-item';
+      totalEl.innerHTML = `<span class="stat-label">Total</span><span class="stat-value">${total}</span>`;
+      bar.appendChild(totalEl);
+
+      for (const key of Object.keys(BLOCK_COLORS)) {
+        if (!counts[key]) continue;
+        const item = document.createElement('div');
+        item.className = 'stat-item';
+        item.innerHTML = `
+          <span class="stat-swatch" style="background:${BLOCK_COLORS[key]}"></span>
+          <span class="stat-label">${BLOCK_LABELS[key]}</span>
+          <span class="stat-value">${counts[key]}</span>
+        `;
+        bar.appendChild(item);
+      }
     }
 
-    function placeQuadrant(grid, segments, cx, cy, w, h, mode) {
-      // External: slope faces outward, solid fills inward (default arc position)
-      // Internal: slope faces inward, solid fills outward (shift blocks outward by 1)
-      const offset = mode === 'internal' ? -1 : 0;
+    function getCellSize() {
+      const frame = document.querySelector('.canvas-frame');
+      const maxW = frame.clientWidth - 32;
+      const maxH = Math.min(window.innerHeight - 200, 700);
+      const fitW = Math.floor(maxW / state.width);
+      const fitH = Math.floor(maxH / state.height);
+      return Math.max(4, Math.min(36, Math.min(fitW, fitH)));
+    }
 
-      for (const seg of segments) {
-        const cells = getSegmentCells(seg);
-        for (const cell of cells) {
-          // Apply offset: shift cells away from center for internal mode
-          const ox = cell.x;
-          const oy = cell.y + offset;
-          if (oy < 0) continue;
-          const mirrors = mirrorPositions(ox, oy, cx, cy, w, h);
-          for (const m of mirrors) {
-            if (grid[m.gy] && grid[m.gy][m.gx] === null) {
-              grid[m.gy][m.gx] = { type: seg.blockKey, rotation: m.rotation };
-            }
-          }
-        }
+    function applyRotation(p, rotation, cs) {
+      switch (rotation) {
+        case 0: return p;
+        case 1: return { x: cs - p.x, y: p.y };
+        case 2: return { x: p.x, y: cs - p.y };
+        case 3: return { x: cs - p.x, y: cs - p.y };
+        case 4: return { x: cs - p.y, y: p.x };       // 90° CW
+        case 5: return { x: p.y, y: p.x };             // transpose
+        case 6: return { x: cs - p.y, y: cs - p.x };   // anti-diagonal
+        case 7: return { x: p.y, y: cs - p.x };         // 90° CCW
       }
     }
 
     function lightenColor(hex, amount) {
-      // Parse hex to r,g,b
       const h = hex.replace('#', '');
       const r = parseInt(h.slice(0, 2), 16);
       const g = parseInt(h.slice(2, 4), 16);
       const b = parseInt(h.slice(4, 6), 16);
-      // Lighten by blending toward white
       const lr = Math.min(255, Math.round(r + (255 - r) * amount));
       const lg = Math.min(255, Math.round(g + (255 - g) * amount));
       const lb = Math.min(255, Math.round(b + (255 - b) * amount));
       return `rgb(${lr}, ${lg}, ${lb})`;
+    }
+
+    function darkenColor(hex, amount) {
+      const h = hex.replace('#', '');
+      const r = parseInt(h.slice(0, 2), 16);
+      const g = parseInt(h.slice(2, 4), 16);
+      const b = parseInt(h.slice(4, 6), 16);
+      const dr = Math.round(r * (1 - amount));
+      const dg = Math.round(g * (1 - amount));
+      const db = Math.round(b * (1 - amount));
+      return `rgb(${dr}, ${dg}, ${db})`;
     }
 
     function render() {
@@ -495,58 +824,121 @@
       const ctx = canvas.getContext('2d');
       const w = state.width;
       const h = state.height;
+      const isInternal = state.mode === 'internal';
+      const pad = isInternal ? 1 : 0;
 
       const cellSize = getCellSize();
-      canvas.width = w * cellSize;
-      canvas.height = h * cellSize;
+      canvas.width = (w + 2 * pad) * cellSize;
+      canvas.height = (h + 2 * pad) * cellSize;
 
       // Background
-      ctx.fillStyle = '#0d1117';
+      ctx.fillStyle = '#060a12';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+      // Subtle grid
+      ctx.strokeStyle = 'rgba(20, 40, 60, 0.5)';
+      ctx.lineWidth = 0.5;
+      for (let x = 0; x <= w + 2 * pad; x++) {
+        ctx.beginPath();
+        ctx.moveTo(x * cellSize, 0);
+        ctx.lineTo(x * cellSize, canvas.height);
+        ctx.stroke();
+      }
+      for (let y = 0; y <= h + 2 * pad; y++) {
+        ctx.beginPath();
+        ctx.moveTo(0, y * cellSize);
+        ctx.lineTo(canvas.width, y * cellSize);
+        ctx.stroke();
+      }
+
       // Draw cells
-      for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-          const cell = state.grid[y] && state.grid[y][x];
+      for (let y = -pad; y < h + pad; y++) {
+        for (let x = -pad; x < w + pad; x++) {
+          const cell = (y >= 0 && y < h && x >= 0 && x < w) ? state.grid[y] && state.grid[y][x] : null;
           const isHovered = state.hoverCell && state.hoverCell.x === x && state.hoverCell.y === y;
-          const px = x * cellSize;
-          const py = y * cellSize;
+          const px = (x + pad) * cellSize;
+          const py = (y + pad) * cellSize;
           const cs = cellSize - 1;
 
           if (cell) {
-            const blockType = BLOCK_TYPES[cell.type];
-            const baseColor = blockType ? blockType.color : '#666';
-            ctx.fillStyle = isHovered ? lightenColor(baseColor, 0.3) : baseColor;
-            ctx.fillRect(px, py, cs, cs);
+            const baseColor = BLOCK_COLORS[cell.type] || '#666';
+            const color = isHovered ? lightenColor(baseColor, 0.3) : baseColor;
+            const darkColor = darkenColor(baseColor, 0.4);
 
-            // Draw slope indicator for non-flat blocks
-            if (cell.type !== 'flat' && cellSize >= 6) {
-              ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-              ctx.lineWidth = 1;
-              ctx.beginPath();
-              // rotation 0: bottom-left to top-right
-              // rotation 1: bottom-right to top-left
-              // rotation 2: top-left to bottom-right
-              // rotation 3: top-right to bottom-left
-              const r = cell.rotation;
-              if (r === 0) {
-                ctx.moveTo(px, py + cs);
-                ctx.lineTo(px + cs, py);
-              } else if (r === 1) {
-                ctx.moveTo(px + cs, py + cs);
-                ctx.lineTo(px, py);
-              } else if (r === 2) {
-                ctx.moveTo(px, py);
-                ctx.lineTo(px + cs, py + cs);
-              } else {
-                ctx.moveTo(px + cs, py);
-                ctx.lineTo(px, py + cs);
+            if (cell.type === 'flat') {
+              ctx.fillStyle = color;
+              ctx.fillRect(px + 0.5, py + 0.5, cs, cs);
+            } else {
+              // Slope background
+              ctx.fillStyle = isHovered ? '#1a2030' : '#0e1420';
+              ctx.fillRect(px + 0.5, py + 0.5, cs, cs);
+
+              const segDx = cell.segDx || 1;
+              const segDy = cell.segDy || 1;
+              const relX = cell.relX || 0;
+              const relY = cell.relY || 0;
+
+              const slope = segDy / segDx;
+              const lyAtX0 = relX * cs * slope - relY * cs;
+              const lyAtXcs = (relX + 1) * cs * slope - relY * cs;
+
+              const lp = [];
+              if (lyAtX0 >= 0 && lyAtX0 <= cs) lp.push({ x: 0, y: lyAtX0 });
+              if (lyAtXcs >= 0 && lyAtXcs <= cs) lp.push({ x: cs, y: lyAtXcs });
+              if (lyAtX0 < 0 && lyAtXcs > 0) {
+                const xAtTop = (relY * cs) / slope - relX * cs;
+                lp.unshift({ x: Math.max(0, Math.min(cs, xAtTop)), y: 0 });
               }
-              ctx.stroke();
+              if (lyAtX0 > cs && lyAtXcs < cs) {
+                const xAtBot = ((relY + 1) * cs) / slope - relX * cs;
+                lp.unshift({ x: Math.max(0, Math.min(cs, xAtBot)), y: cs });
+              }
+              if (lyAtXcs < 0 && lyAtX0 > 0) {
+                const xAtTop = (relY * cs) / slope - relX * cs;
+                lp.push({ x: Math.max(0, Math.min(cs, xAtTop)), y: 0 });
+              }
+              if (lyAtXcs > cs && lyAtX0 < cs) {
+                const xAtBot = ((relY + 1) * cs) / slope - relX * cs;
+                lp.push({ x: Math.max(0, Math.min(cs, xAtBot)), y: cs });
+              }
+
+              const fillBelow = state.mode === 'external';
+              const corners = [{ x: 0, y: 0 }, { x: cs, y: 0 }, { x: cs, y: cs }, { x: 0, y: cs }];
+              const fillCorners = corners.filter(c => {
+                const lineY = (c.x + relX * cs) * slope - relY * cs;
+                if (fillBelow) return c.y > lineY + 0.01;
+                else return c.y < lineY - 0.01;
+              });
+
+              const poly = [...lp, ...fillCorners];
+              if (poly.length >= 3) {
+                const centX = poly.reduce((s, p) => s + p.x, 0) / poly.length;
+                const centY = poly.reduce((s, p) => s + p.y, 0) / poly.length;
+                poly.sort((a, b) => Math.atan2(a.y - centY, a.x - centX) - Math.atan2(b.y - centY, b.x - centX));
+
+                const rPoly = poly.map(p => applyRotation(p, cell.rotation, cs));
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.moveTo(px + 0.5 + rPoly[0].x, py + 0.5 + rPoly[0].y);
+                for (let i = 1; i < rPoly.length; i++)
+                  ctx.lineTo(px + 0.5 + rPoly[i].x, py + 0.5 + rPoly[i].y);
+                ctx.closePath();
+                ctx.fill();
+              }
+
+              // Slope line
+              if (cs >= 6 && lp.length >= 2) {
+                const rl = lp.map(p => applyRotation(p, cell.rotation, cs));
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(px + 0.5 + rl[0].x, py + 0.5 + rl[0].y);
+                ctx.lineTo(px + 0.5 + rl[1].x, py + 0.5 + rl[1].y);
+                ctx.stroke();
+              }
             }
           } else {
-            ctx.fillStyle = isHovered ? '#333' : '#222';
-            ctx.fillRect(px, py, cs, cs);
+            // Empty cell — just the grid background shows through
           }
         }
       }
@@ -555,14 +947,12 @@
     function getCellFromMouse(e) {
       const canvas = document.getElementById('grid-canvas');
       const rect = canvas.getBoundingClientRect();
-      const w = state.width;
-      const h = state.height;
       const cellSize = getCellSize();
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
       const cx = Math.floor(mx / cellSize);
       const cy = Math.floor(my / cellSize);
-      if (cx >= 0 && cx < w && cy >= 0 && cy < h) {
+      if (cx >= 0 && cx < state.width && cy >= 0 && cy < state.height) {
         return { x: cx, y: cy };
       }
       return null;
@@ -582,11 +972,12 @@
 
       if (cell) {
         const gridCell = state.grid[cell.y] && state.grid[cell.y][cell.x];
-        const name = gridCell ? (BLOCK_TYPES[gridCell.type] ? BLOCK_TYPES[gridCell.type].name : gridCell.type) : 'Empty';
-        _tooltip.textContent = name;
+        const name = gridCell ? (BLOCK_LABELS[gridCell.type] || gridCell.type) : 'Empty';
+        const coord = `(${cell.x}, ${cell.y})`;
+        _tooltip.textContent = `${name} ${coord}`;
         _tooltip.style.display = 'block';
-        _tooltip.style.left = (e.clientX + 12) + 'px';
-        _tooltip.style.top = (e.clientY - 8) + 'px';
+        _tooltip.style.left = (e.clientX + 14) + 'px';
+        _tooltip.style.top = (e.clientY - 6) + 'px';
       } else {
         _tooltip.style.display = 'none';
       }
@@ -598,26 +989,51 @@
       render();
     });
 
+    // Build block type checkboxes
+    function buildBlockList() {
+      const container = document.getElementById('block-list');
+      container.innerHTML = '';
+      const defaults = new Set(['flat', 'slope45', 'slope2']);
+
+      for (const key of Object.keys(BLOCK_COLORS)) {
+        const item = document.createElement('label');
+        item.className = 'block-item';
+
+        const isFlat = key === 'flat';
+        const isDefault = defaults.has(key);
+
+        item.innerHTML = `
+          <span class="block-check">
+            <input type="checkbox" value="${key}" ${isDefault ? 'checked' : ''} ${isFlat ? 'disabled' : ''}
+                   onchange="toggleBlock('${key}', this.checked)" />
+            <span class="check-visual"></span>
+          </span>
+          <span class="block-swatch" style="background:${BLOCK_COLORS[key]}"></span>
+          <span class="block-name">${BLOCK_LABELS[key]}</span>
+        `;
+        container.appendChild(item);
+      }
+    }
+
+    // Build legend
     function buildLegend() {
       const legend = document.getElementById('legend');
       legend.innerHTML = '';
-      for (const [, block] of Object.entries(BLOCK_TYPES)) {
+      for (const [key, label] of Object.entries(BLOCK_LABELS)) {
         const item = document.createElement('div');
         item.className = 'legend-item';
-
-        const swatch = document.createElement('div');
-        swatch.className = 'legend-swatch';
-        swatch.style.background = block.color;
-
-        const label = document.createElement('span');
-        label.textContent = block.name;
-
-        item.appendChild(swatch);
-        item.appendChild(label);
+        item.innerHTML = `
+          <span class="legend-swatch" style="background:${BLOCK_COLORS[key]}"></span>
+          <span class="legend-label">${label}</span>
+        `;
         legend.appendChild(item);
       }
     }
 
+    // Handle window resize
+    window.addEventListener('resize', () => render());
+
+    buildBlockList();
     buildLegend();
     recalculate();
   </script>
