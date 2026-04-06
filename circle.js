@@ -8,14 +8,8 @@ const BLOCK_TYPES = {
   slope6:  { name: '1:6',  dx: 1, dy: 6 },
 };
 
-// Phase 1: Compute a connected vertex chain approximating one quadrant of the ellipse.
-// Returns array of { x0, y0, x1, y1, blockKey }.
-function computePath(rx, ry, enabledBlocks, ordering) {
-  const maxX = Math.ceil(rx);
-  const maxY = Math.ceil(ry);
-  if (maxX <= 0 || maxY <= 0) return [];
-
-  // Build available moves from enabled blocks
+// Build the set of cursor moves from enabled block types.
+function buildMoves(enabledBlocks) {
   const moves = [];
   for (const key of enabledBlocks) {
     const block = BLOCK_TYPES[key];
@@ -31,9 +25,12 @@ function computePath(rx, ry, enabledBlocks, ordering) {
       moves.push({ advX: 1, advY: n, blockKey: key });
     }
   }
+  return moves;
+}
 
-  const monotonic = ordering === 'monotonic';
-
+// Walk the cursor along the ellipse, choosing the best move at each step.
+// stopCondition(curX, curY) returns true to stop early (used for octant limit).
+function walkPath(moves, rx, ry, maxX, maxY, monotonic, stopCondition) {
   // Calculate where the ellipse crosses y=0.5 to find starting flat cap extent
   const startStdY = ry - 0.5;
   const startX = startStdY > 0
@@ -41,8 +38,8 @@ function computePath(rx, ry, enabledBlocks, ordering) {
     : rx;
   let curX = Math.max(0, Math.floor(startX));
 
-  // Top flat cap: horizontal segments from (0,0) to (curX, 0)
   const path = [];
+  // Top flat cap: horizontal segments from (0,0) to (curX, 0)
   for (let x = 0; x < curX; x++) {
     path.push({ x0: x, y0: 0, x1: x + 1, y1: 0, blockKey: 'flat' });
   }
@@ -53,6 +50,7 @@ function computePath(rx, ry, enabledBlocks, ordering) {
 
   for (let step = 0; step < maxSteps; step++) {
     if (curX >= maxX || curY >= maxY) break;
+    if (stopCondition && stopCondition(curX, curY)) break;
 
     let bestScore = Infinity;
     let bestMove = null;
@@ -62,28 +60,20 @@ function computePath(rx, ry, enabledBlocks, ordering) {
       const ny = curY + move.advY;
 
       if (nx > maxX || ny > maxY) continue;
+      if (stopCondition && stopCondition(nx, ny)) continue;
 
-      // Monotonic: reject moves that decrease steepness
       if (monotonic) {
         const steepness = move.advX === 0 ? Infinity : move.advY / move.advX;
         if (steepness < lastSteepness - 0.001) continue;
-        // Don't allow vertical-only moves until we've reached maxX
         if (move.advX === 0 && curX < maxX) continue;
-        // Don't commit to a steepness that would prevent reaching maxX.
-        // After this move, the remaining y-budget is maxY - ny.
-        // With steepness >= s, max x-advance per y = 1/s (for s>0) or 0 (for s=Inf).
-        // The flattest available move with steepness >= s determines max x progress.
         if (steepness > lastSteepness + 0.001 && nx < maxX) {
-          // Check if we can still reach maxX with this new minimum steepness
           const remainY = maxY - ny;
-          // Best case: use moves at exactly this steepness to maximize x advance
           const maxXperY = steepness > 0 ? 1 / steepness : Infinity;
           const reachableX = nx + remainY * maxXperY;
           if (reachableX < maxX - 0.001) continue;
         }
       }
 
-      // Score: how close is the endpoint to the ideal ellipse?
       const stdX = nx;
       const stdY = ry - ny;
       const normR = Math.sqrt((stdX * stdX) / (rx * rx) + (stdY * stdY) / (ry * ry));
@@ -113,12 +103,34 @@ function computePath(rx, ry, enabledBlocks, ordering) {
     curY += bestMove.advY;
   }
 
-  // Add side flat cap at the end to reach maxY (vertical segments)
-  // These continue the monotonic increase (steepness goes to Inf)
+  return { path, curX, curY };
+}
+
+// Phase 1: Compute a connected vertex chain approximating one quadrant of the ellipse.
+// Returns array of { x0, y0, x1, y1, blockKey }.
+function computePath(rx, ry, enabledBlocks, ordering) {
+  const maxX = Math.ceil(rx);
+  const maxY = Math.ceil(ry);
+  if (maxX <= 0 || maxY <= 0) return [];
+
+  const moves = buildMoves(enabledBlocks);
+  const monotonic = ordering === 'monotonic';
+
+  // For odd height, limit the walker's Y so slopes can't reach the center
+  // row. The center row lies on the vertical mirror axis; slopes there would
+  // overlap with conflicting rotations. The flat cap fills the final row.
+  // (Odd width doesn't need this — the center column is at qx=0, always flat.)
+  const h = Math.ceil(ry * 2);
+  const walkMaxY = (h % 2 === 1) ? maxY - 1 : maxY;
+
+  const result = walkPath(moves, rx, ry, maxX, walkMaxY, monotonic, null);
+  const path = result.path;
+  let curX = result.curX;
+  let curY = result.curY;
+
+  // Add flat caps to reach the full quadrant boundary
   if (curX < maxX && curY >= maxY) {
-    // Need horizontal cap but this would break monotonicity after vertical moves
-    // Only add if it won't break monotonicity
-    if (!monotonic || lastSteepness <= 0.001) {
+    if (!monotonic || curY === 0) {
       for (let x = curX; x < maxX; x++) {
         path.push({ x0: x, y0: curY, x1: x + 1, y1: curY, blockKey: 'flat' });
       }
@@ -148,23 +160,36 @@ function fillPathToGrid(path, grid, rx, ry, w, h, mode) {
       // Diagonal segment: fill all cells in bounding box [x0..x1-1] x [y0..y1-1]
       for (let x = seg.x0; x < seg.x1; x++) {
         for (let y = seg.y0; y < seg.y1; y++) {
-          cells.push({ x, y });
+          cells.push({ x, y, segDx: dx, segDy: dy, relX: x - seg.x0, relY: y - seg.y0 });
         }
       }
     } else if (dx > 0 && dy === 0) {
-      // Flat horizontal segment
-      const fillY = mode === 'external' ? seg.y0 - 1 : seg.y0;
-      if (fillY >= 0) {
-        for (let x = seg.x0; x < seg.x1; x++) {
-          cells.push({ x, y: fillY });
-        }
+      // Flat horizontal segment: fill the adjacent row.
+      // External: fill the row above (toward exterior). At y=0 boundary, fill y=0 itself.
+      // Internal: fill the row below (toward interior).
+      let fillY;
+      if (mode === 'external') {
+        fillY = seg.y0 === 0 ? 0 : seg.y0 - 1;
+      } else {
+        fillY = seg.y0;
+      }
+      for (let x = seg.x0; x < seg.x1; x++) {
+        cells.push({ x, y: fillY, segDx: 0, segDy: 0, relX: 0, relY: 0 });
       }
     } else if (dx === 0 && dy > 0) {
-      // Flat vertical segment
-      const fillX = mode === 'external' ? seg.x0 : seg.x0 - 1;
+      // Flat vertical segment: fill the adjacent column.
+      // External: fill the column to the right. At x=maxX boundary, fill maxX-1 itself.
+      // Internal: fill the column to the left.
+      const maxX = Math.ceil(rx);
+      let fillX;
+      if (mode === 'external') {
+        fillX = seg.x0 >= maxX ? seg.x0 - 1 : seg.x0;
+      } else {
+        fillX = seg.x0 === 0 ? 0 : seg.x0 - 1;
+      }
       if (fillX >= 0) {
         for (let y = seg.y0; y < seg.y1; y++) {
-          cells.push({ x: fillX, y });
+          cells.push({ x: fillX, y, segDx: 0, segDy: 0, relX: 0, relY: 0 });
         }
       }
     }
@@ -176,8 +201,53 @@ function fillPathToGrid(path, grid, rx, ry, w, h, mode) {
           grid[m.gy][m.gx] = {
             type: seg.blockKey,
             rotation: m.rotation,
+            segDx: cell.segDx,
+            segDy: cell.segDy,
+            relX: cell.relX,
+            relY: cell.relY,
           };
         }
+      }
+    }
+  }
+}
+
+// For circles: enforce 90° rotational symmetry by overwriting second-octant
+// cells with rotated first-octant cells. The first octant (near top/bottom
+// edges) is more accurate because the walker starts there.
+//
+// The visual transformation for 90° CW grid rotation is:
+//   Rot90CW = H-flip ∘ transpose
+// So canonical geometry gets transposed (swap dx/dy, relX/relY) and the
+// rotation field maps as: 0→1, 1→3, 2→0, 3→2.
+function enforceRotationalSymmetry(grid, w, h) {
+  const half = (w - 1) / 2;
+  // 90° CW rotation composed with each source rotation:
+  // 0(id)→4(90°CW), 1(H)→6(anti-diag), 2(V)→5(transpose), 3(H+V)→7(90°CCW)
+  const ROT_MAP = [4, 6, 5, 7];
+
+  for (let gy = 0; gy < h; gy++) {
+    for (let gx = 0; gx < w; gx++) {
+      const dx = Math.abs(gx - half);
+      const dy = Math.abs(gy - half);
+      if (dx <= dy) continue; // first octant or diagonal — keep as-is
+
+      // Second octant: overwrite with 90° CCW rotation source (from first octant)
+      const srcX = gy;
+      const srcY = w - 1 - gx;
+      const src = grid[srcY][srcX];
+
+      if (src) {
+        grid[gy][gx] = {
+          type: src.type,
+          rotation: ROT_MAP[src.rotation],
+          segDx: src.segDx,
+          segDy: src.segDy,
+          relX: src.relX,
+          relY: src.relY,
+        };
+      } else {
+        grid[gy][gx] = null;
       }
     }
   }
@@ -224,6 +294,10 @@ function computeCircle({ width, height, mode, enabledBlocks, ordering }) {
 
   const path = computePath(rx, ry, enabledBlocks, ordering);
   fillPathToGrid(path, grid, rx, ry, w, h, mode);
+
+  if (w === h) {
+    enforceRotationalSymmetry(grid, w, h);
+  }
 
   return { path, grid };
 }

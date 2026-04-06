@@ -155,6 +155,108 @@ function checkEnabledOnly(grid, w, h, enabledBlocks) {
   return { pass: true, message: 'all cells use enabled types' };
 }
 
+function checkRotationalSymmetry(grid, w, h) {
+  if (w !== h) return { pass: true, message: 'skipped (non-square)' };
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const type = grid[y][x] ? grid[y][x].type : null;
+      // 90° clockwise rotation: (x, y) -> (w-1-y, x)
+      const rx = w - 1 - y;
+      const ry = x;
+      const rType = grid[ry][rx] ? grid[ry][rx].type : null;
+      if (type !== rType) {
+        return {
+          pass: false,
+          message: `90° rotation: (${x},${y})=${type} vs (${rx},${ry})=${rType}`
+        };
+      }
+    }
+  }
+  return { pass: true, message: '90° rotational symmetry' };
+}
+
+function checkOddCenterFlat(grid, w, h) {
+  // When a dimension is odd, the center row/column lies on the mirror axis.
+  // Blocks there must be flat to avoid slope overlap from quadrant mirroring.
+  if (h % 2 === 1) {
+    const centerY = Math.floor(h / 2);
+    for (let x = 0; x < w; x++) {
+      if (grid[centerY][x] && grid[centerY][x].type !== 'flat') {
+        return {
+          pass: false,
+          message: `odd height: cell (${x},${centerY}) is ${grid[centerY][x].type}, expected flat at center row`
+        };
+      }
+    }
+  }
+  if (w % 2 === 1) {
+    const centerX = Math.floor(w / 2);
+    for (let y = 0; y < h; y++) {
+      if (grid[y][centerX] && grid[y][centerX].type !== 'flat') {
+        return {
+          pass: false,
+          message: `odd width: cell (${centerX},${y}) is ${grid[y][centerX].type}, expected flat at center column`
+        };
+      }
+    }
+  }
+  return { pass: true, message: 'center row/column flat for odd dimensions' };
+}
+
+function checkPathCoverage(path, grid, w, h, mode) {
+  if (path.length === 0) return { pass: true, message: 'empty path' };
+  const cx = w / 2;
+  const cy = h / 2;
+
+  for (let i = 0; i < path.length; i++) {
+    const seg = path[i];
+    const dx = seg.x1 - seg.x0;
+    const dy = seg.y1 - seg.y0;
+    if (dx === 0 && dy === 0) continue;
+
+    // Check that this segment produced at least one grid cell.
+    // Search the neighborhood around the segment for a mirrored grid cell.
+    // For circles (w===h), the symmetry post-processing may change block types,
+    // so we check for any non-null cell. For ellipses, check the exact type.
+    let produced = false;
+    const minX = Math.max(0, Math.min(seg.x0, seg.x1) - 1);
+    const maxX = Math.max(seg.x0, seg.x1);
+    const minY = Math.max(0, Math.min(seg.y0, seg.y1) - 1);
+    const maxY = Math.max(seg.y0, seg.y1);
+    const checkType = w === h ? null : seg.blockKey;
+
+    for (let y = minY; y <= maxY && !produced; y++) {
+      for (let x = minX; x <= maxX && !produced; x++) {
+        if (hasMirroredCellOfType(grid, x, y, cx, cy, w, h, checkType)) produced = true;
+      }
+    }
+
+    if (!produced) {
+      return {
+        pass: false,
+        message: `segment ${i} (${seg.x0},${seg.y0})->(${seg.x1},${seg.y1}) ${seg.blockKey} produced no grid cells`
+      };
+    }
+  }
+  return { pass: true, message: 'all segments produce cells' };
+}
+
+function hasMirroredCellOfType(grid, qx, qy, cx, cy, w, h, blockType) {
+  const floorCx = Math.floor(cx);
+  const ceilCx = Math.ceil(cx);
+  const positions = [
+    { gx: floorCx + qx, gy: qy },
+    { gx: ceilCx - 1 - qx, gy: qy },
+    { gx: floorCx + qx, gy: h - 1 - qy },
+    { gx: ceilCx - 1 - qx, gy: h - 1 - qy },
+  ];
+  for (const p of positions) {
+    if (p.gx >= 0 && p.gx < w && p.gy >= 0 && p.gy < h &&
+        grid[p.gy][p.gx] && (blockType === null || grid[p.gy][p.gx].type === blockType)) return true;
+  }
+  return false;
+}
+
 // --- Grid dump for diagnostics ---
 
 function gridToString(grid, w, h) {
@@ -235,6 +337,9 @@ const RULES = [
   { name: 'monotonicity',         fn: (result, tc) => tc.ordering === 'monotonic' ? checkMonotonicity(result.path) : { pass: true, message: 'skipped (free ordering)' } },
   { name: 'grid-symmetry',        fn: (result, tc) => checkSymmetry(result.grid, tc.width, tc.height) },
   { name: 'grid-bounding-box',    fn: (result, tc) => checkBoundingBox(result.grid, tc.width, tc.height) },
+  { name: 'rotational-symmetry',  fn: (result, tc) => checkRotationalSymmetry(result.grid, tc.width, tc.height) },
+  { name: 'path-coverage',        fn: (result, tc) => checkPathCoverage(result.path, result.grid, tc.width, tc.height, tc.mode) },
+  { name: 'odd-center-flat',      fn: (result, tc) => checkOddCenterFlat(result.grid, tc.width, tc.height) },
   { name: 'surface-contribution', fn: (result, tc) => checkSurfaceContribution(result.grid, tc.width, tc.height) },
   { name: 'enabled-only',         fn: (result, tc) => checkEnabledOnly(result.grid, tc.width, tc.height, tc.enabledBlocks) },
 ];
