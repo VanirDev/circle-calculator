@@ -544,7 +544,6 @@
   <div class="app">
     <div class="header">
       <h1>Circle Calculator</h1>
-      <span class="tag">Space Engineers</span>
     </div>
 
     <div class="layout">
@@ -615,9 +614,6 @@
           <canvas id="grid-canvas"></canvas>
         </div>
 
-        <div class="stats-bar" id="stats-bar"></div>
-
-        <div class="legend-bar" id="legend"></div>
       </div>
     </div>
   </div>
@@ -729,7 +725,6 @@
       console.log(text);
 
       updateDimInfo();
-      updateStats();
       render();
     }
 
@@ -737,42 +732,6 @@
       const el = document.getElementById('dim-info');
       const shape = state.width === state.height ? 'Circle' : 'Ellipse';
       el.innerHTML = `<span>${state.width}</span> × <span>${state.height}</span> — ${shape}`;
-    }
-
-    function updateStats() {
-      const w = state.width;
-      const h = state.height;
-      const counts = {};
-      let total = 0;
-      for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-          const cell = state.grid[y] && state.grid[y][x];
-          if (cell) {
-            counts[cell.type] = (counts[cell.type] || 0) + 1;
-            total++;
-          }
-        }
-      }
-
-      const bar = document.getElementById('stats-bar');
-      bar.innerHTML = '';
-
-      const totalEl = document.createElement('div');
-      totalEl.className = 'stat-item';
-      totalEl.innerHTML = `<span class="stat-label">Total</span><span class="stat-value">${total}</span>`;
-      bar.appendChild(totalEl);
-
-      for (const key of Object.keys(BLOCK_COLORS)) {
-        if (!counts[key]) continue;
-        const item = document.createElement('div');
-        item.className = 'stat-item';
-        item.innerHTML = `
-          <span class="stat-swatch" style="background:${BLOCK_COLORS[key]}"></span>
-          <span class="stat-label">${BLOCK_LABELS[key]}</span>
-          <span class="stat-value">${counts[key]}</span>
-        `;
-        bar.appendChild(item);
-      }
     }
 
     function getCellSize() {
@@ -854,7 +813,26 @@
       // Draw cells
       for (let y = -pad; y < h + pad; y++) {
         for (let x = -pad; x < w + pad; x++) {
-          const cell = (y >= 0 && y < h && x >= 0 && x < w) ? state.grid[y] && state.grid[y][x] : null;
+          let cell;
+          if (isInternal) {
+            if (y >= 0 && y < h && x >= 0 && x < w) {
+              cell = state.grid[y] && state.grid[y][x];
+              // In internal mode, flat boundary cells render in the padding area instead
+              if (cell && cell.type === 'flat' &&
+                  (y === 0 || y === h - 1 || x === 0 || x === w - 1)) {
+                cell = null;
+              }
+            } else {
+              // Padding area: pull flat cells from the adjacent boundary
+              cell = null;
+              if (y === -1 && x >= 0 && x < w) cell = state.grid[0]?.[x]?.type === 'flat' ? state.grid[0][x] : null;
+              else if (y === h && x >= 0 && x < w) cell = state.grid[h - 1]?.[x]?.type === 'flat' ? state.grid[h - 1][x] : null;
+              else if (x === -1 && y >= 0 && y < h) cell = state.grid[y]?.[0]?.type === 'flat' ? state.grid[y][0] : null;
+              else if (x === w && y >= 0 && y < h) cell = state.grid[y]?.[w - 1]?.type === 'flat' ? state.grid[y][w - 1] : null;
+            }
+          } else {
+            cell = (y >= 0 && y < h && x >= 0 && x < w) ? state.grid[y] && state.grid[y][x] : null;
+          }
           const isHovered = state.hoverCell && state.hoverCell.x === x && state.hoverCell.y === y;
           const px = (x + pad) * cellSize;
           const py = (y + pad) * cellSize;
@@ -1015,26 +993,10 @@
       }
     }
 
-    // Build legend
-    function buildLegend() {
-      const legend = document.getElementById('legend');
-      legend.innerHTML = '';
-      for (const [key, label] of Object.entries(BLOCK_LABELS)) {
-        const item = document.createElement('div');
-        item.className = 'legend-item';
-        item.innerHTML = `
-          <span class="legend-swatch" style="background:${BLOCK_COLORS[key]}"></span>
-          <span class="legend-label">${label}</span>
-        `;
-        legend.appendChild(item);
-      }
-    }
-
     // Handle window resize
     window.addEventListener('resize', () => render());
 
     buildBlockList();
-    buildLegend();
     recalculate();
   </script>
 </body>
