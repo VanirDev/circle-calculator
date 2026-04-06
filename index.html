@@ -309,99 +309,110 @@
       state.grid = grid;
     }
 
-    function buildMoves(blocks) {
-      // Build all available moves from enabled blocks.
-      // Each move: { advX, advY, angle, blockKey }
-      // advX/advY = how far the cursor advances (and cells occupied) after placing this block.
-      // angle = the tangent angle this block best matches (0 = horizontal, PI/2 = vertical).
-      const moves = [];
+    function computeQuadrant(rx, ry, blocks) {
+      // Phase 1: Generate the perimeter cells by sampling the actual ellipse.
+      // For each row, find the boundary column. For each column, find the boundary row.
+      // Union gives us a complete, connected, symmetric outline.
+      const maxX = Math.ceil(rx);
+      const maxY = Math.ceil(ry);
+      const cells = new Map();
 
-      if (blocks.some(b => b.key === 'flat')) {
-        moves.push({ advX: 1, advY: 0, angle: 0, blockKey: 'flat' });
-        moves.push({ advX: 0, advY: 1, angle: Math.PI / 2, blockKey: 'flat' });
-      }
-
-      for (const block of blocks) {
-        if (block.key === 'flat') continue;
-        const n = block.dy; // 1 for 45deg, 2 for 1:2, etc.
-        if (n === 1) {
-          // 45 deg — symmetric
-          moves.push({ advX: 1, advY: 1, angle: Math.PI / 4, blockKey: block.key });
-        } else {
-          // Shallow orientation: run n horizontal, rise 1 vertical
-          moves.push({ advX: n, advY: 1, angle: Math.atan2(1, n), blockKey: block.key });
-          // Steep orientation: run 1 horizontal, rise n vertical
-          moves.push({ advX: 1, advY: n, angle: Math.atan2(n, 1), blockKey: block.key });
+      function addCell(x, y) {
+        if (x >= 0 && x < maxX && y >= 0 && y < maxY) {
+          cells.set(y * maxX + x, { x, y });
         }
       }
 
-      return moves;
+      // Row pass: for each row qy, find the rightmost boundary column
+      for (let qy = 0; qy < maxY; qy++) {
+        const Y = ry - qy - 0.5; // standard Y (up from center) at cell center
+        if (Y < 0) continue;
+        const X = rx * Math.sqrt(Math.max(0, 1 - (Y * Y) / (ry * ry)));
+        addCell(Math.floor(X), qy);
+      }
+
+      // Column pass: for each column qx, find the topmost boundary row
+      for (let qx = 0; qx < maxX; qx++) {
+        const X = qx + 0.5; // standard X at cell center
+        if (X > rx) continue;
+        const Y = ry * Math.sqrt(Math.max(0, 1 - (X * X) / (rx * rx)));
+        addCell(qx, Math.floor(ry - Y));
+      }
+
+      // Sort cells into a connected path (by y then x)
+      const path = Array.from(cells.values()).sort((a, b) => a.y !== b.y ? a.y - b.y : a.x - b.x);
+
+      // Phase 2: Fit blocks to the path
+      return fitBlocksToPath(path, blocks);
     }
 
-    function computeQuadrant(rx, ry, blocks) {
-      // Walk from top-center to right-center of the ellipse.
-      // Quadrant-local coords: x goes right from center, y goes down from top.
-      //
-      // Instead of matching tangent angles (which causes drift), we pick the
-      // move that minimizes positional error from the actual ellipse boundary.
-      const moves = buildMoves(blocks);
+    function fitBlocksToPath(path, blocks) {
+      // Build available slope patterns from enabled blocks.
+      // Each pattern: { dx, dy, blockKey } — the step from one cell to the next.
+      // A 1:2 slope = 2 horizontal + 1 vertical (or 1h + 2v for steep).
+      // We match runs of cells to find the best fitting block.
       const segments = [];
-      let x = 0;
-      let y = 0;
-      const maxX = Math.floor(rx);
-      const maxY = Math.floor(ry);
 
-      // Quadrant-local y on the ellipse at horizontal position qx
-      function ellipseQY(qx) {
-        const t = qx / rx;
-        if (t >= 1) return ry;
-        return ry * (1 - Math.sqrt(1 - t * t));
+      // Build slope ratios: for each enabled slope, record its run:rise ratio
+      const slopes = [];
+      for (const block of blocks) {
+        if (block.key === 'flat') continue;
+        const n = block.dy;
+        if (n === 1) {
+          slopes.push({ run: 1, rise: 1, blockKey: block.key });
+        } else {
+          slopes.push({ run: n, rise: 1, blockKey: block.key }); // shallow
+          slopes.push({ run: 1, rise: n, blockKey: block.key }); // steep
+        }
       }
+      // Sort by total size descending (prefer larger blocks)
+      slopes.sort((a, b) => (b.run + b.rise) - (a.run + a.rise));
 
-      while (x < maxX || y < maxY) {
-        // If one axis is maxed out, fill the other with flat blocks
-        if (x >= maxX) {
-          segments.push({ x: maxX - 1, y, dx: 1, dy: 1, blockKey: 'flat' });
-          y++;
-          continue;
-        }
-        if (y >= maxY) {
-          segments.push({ x, y: maxY - 1, dx: 1, dy: 1, blockKey: 'flat' });
-          x++;
-          continue;
-        }
+      let i = 0;
+      while (i < path.length) {
+        let matched = false;
 
-        // Pick the move whose endpoint is closest to the actual ellipse
-        let bestMove = null;
-        let bestError = Infinity;
+        // Try to match a slope block starting at this cell
+        for (const slope of slopes) {
+          const needed = slope.run + slope.rise - 1; // cells this slope spans in the path
+          if (i + needed > path.length) continue;
 
-        for (const move of moves) {
-          const newX = x + move.advX;
-          const newY = y + move.advY;
-          if (newX > maxX || newY > maxY) continue;
-          if (newX === x && newY === y) continue;
+          // Check if the next 'needed' cells match this slope's pattern
+          // A slope with run=R, rise=S means: R cells going right, then S cells going down
+          // (or interleaved for the actual staircase path)
+          const startCell = path[i];
+          const endIdx = i + needed - 1;
+          const endCell = path[endIdx];
+          const totalDx = endCell.x - startCell.x;
+          const totalDy = endCell.y - startCell.y;
 
-          // Where should y be on the ellipse at the new x position?
-          const targetY = ellipseQY(newX);
-          const error = Math.abs(newY - targetY);
-
-          if (error < bestError) {
-            bestError = error;
-            bestMove = move;
+          if (totalDx === slope.run - 1 && totalDy === slope.rise - 1) {
+            // This run of cells matches the slope's dimensions
+            // Place as a single slope block
+            segments.push({
+              x: startCell.x,
+              y: startCell.y,
+              dx: slope.run,
+              dy: slope.rise,
+              blockKey: slope.blockKey
+            });
+            i += needed;
+            matched = true;
+            break;
           }
         }
 
-        if (!bestMove) break;
-
-        segments.push({
-          x, y,
-          dx: Math.max(1, bestMove.advX),
-          dy: Math.max(1, bestMove.advY),
-          blockKey: bestMove.blockKey
-        });
-
-        x += bestMove.advX;
-        y += bestMove.advY;
+        if (!matched) {
+          // Place as flat block
+          segments.push({
+            x: path[i].x,
+            y: path[i].y,
+            dx: 1,
+            dy: 1,
+            blockKey: 'flat'
+          });
+          i++;
+        }
       }
 
       return segments;
