@@ -341,7 +341,9 @@
     function computeQuadrant(rx, ry, blocks) {
       // Walk from top-center to right-center of the ellipse.
       // Quadrant-local coords: x goes right from center, y goes down from top.
-      // At the top, tangent is ~horizontal (angle ~0), at the side it's ~vertical (~PI/2).
+      //
+      // Instead of matching tangent angles (which causes drift), we pick the
+      // move that minimizes positional error from the actual ellipse boundary.
       const moves = buildMoves(blocks);
       const segments = [];
       let x = 0;
@@ -349,65 +351,55 @@
       const maxX = Math.floor(rx);
       const maxY = Math.floor(ry);
 
+      // Quadrant-local y on the ellipse at horizontal position qx
+      function ellipseQY(qx) {
+        const t = qx / rx;
+        if (t >= 1) return ry;
+        return ry * (1 - Math.sqrt(1 - t * t));
+      }
+
       while (x < maxX || y < maxY) {
         // If one axis is maxed out, fill the other with flat blocks
         if (x >= maxX) {
-          segments.push({ x: maxX, y, dx: 1, dy: 1, blockKey: 'flat' });
+          segments.push({ x: maxX - 1, y, dx: 1, dy: 1, blockKey: 'flat' });
           y++;
           continue;
         }
         if (y >= maxY) {
-          segments.push({ x, y: maxY, dx: 1, dy: 1, blockKey: 'flat' });
+          segments.push({ x, y: maxY - 1, dx: 1, dy: 1, blockKey: 'flat' });
           x++;
           continue;
         }
 
-        // Map grid position to ellipse-space for tangent calculation.
-        // In ellipse coords: ex = distance right from center, eY = distance up from center.
-        const ex = x + 0.5;
-        const eY = ry - (y + 0.5);
-        if (eY <= 0) { x++; continue; }
-
-        // Tangent angle: 0 = horizontal, PI/2 = vertical
-        const tangentAngle = Math.atan2(ry * ry * ex, rx * rx * eY);
-
-        // Find best matching move that doesn't overshoot
+        // Pick the move whose endpoint is closest to the actual ellipse
         let bestMove = null;
-        let bestDiff = Infinity;
+        let bestError = Infinity;
+
         for (const move of moves) {
-          if (move.advX > 0 && x + move.advX > maxX) continue;
-          if (move.advY > 0 && y + move.advY > maxY) continue;
-          const diff = Math.abs(tangentAngle - move.angle);
-          if (diff < bestDiff) {
-            bestDiff = diff;
+          const newX = x + move.advX;
+          const newY = y + move.advY;
+          if (newX > maxX || newY > maxY) continue;
+          if (newX === x && newY === y) continue;
+
+          // Where should y be on the ellipse at the new x position?
+          const targetY = ellipseQY(newX);
+          const error = Math.abs(newY - targetY);
+
+          if (error < bestError) {
+            bestError = error;
             bestMove = move;
           }
         }
 
-        // Fallback: single flat in the dominant direction
-        if (!bestMove) {
-          if (tangentAngle < Math.PI / 4) {
-            segments.push({ x, y, dx: 1, dy: 1, blockKey: 'flat' });
-            x++;
-          } else {
-            segments.push({ x, y, dx: 1, dy: 1, blockKey: 'flat' });
-            y++;
-          }
-          continue;
-        }
-
-        // Cells occupied by this block
-        const cellsX = Math.max(1, bestMove.advX);
-        const cellsY = Math.max(1, bestMove.advY);
+        if (!bestMove) break;
 
         segments.push({
           x, y,
-          dx: cellsX,
-          dy: cellsY,
+          dx: Math.max(1, bestMove.advX),
+          dy: Math.max(1, bestMove.advY),
           blockKey: bestMove.blockKey
         });
 
-        // Advance cursor
         x += bestMove.advX;
         y += bestMove.advY;
       }
