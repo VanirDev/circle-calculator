@@ -309,93 +309,107 @@
       state.grid = grid;
     }
 
+    function buildMoves(blocks) {
+      // Build all available moves from enabled blocks.
+      // Each move: { advX, advY, angle, blockKey }
+      // advX/advY = how far the cursor advances (and cells occupied) after placing this block.
+      // angle = the tangent angle this block best matches (0 = horizontal, PI/2 = vertical).
+      const moves = [];
+
+      if (blocks.some(b => b.key === 'flat')) {
+        moves.push({ advX: 1, advY: 0, angle: 0, blockKey: 'flat' });
+        moves.push({ advX: 0, advY: 1, angle: Math.PI / 2, blockKey: 'flat' });
+      }
+
+      for (const block of blocks) {
+        if (block.key === 'flat') continue;
+        const n = block.dy; // 1 for 45deg, 2 for 1:2, etc.
+        if (n === 1) {
+          // 45 deg — symmetric
+          moves.push({ advX: 1, advY: 1, angle: Math.PI / 4, blockKey: block.key });
+        } else {
+          // Shallow orientation: run n horizontal, rise 1 vertical
+          moves.push({ advX: n, advY: 1, angle: Math.atan2(1, n), blockKey: block.key });
+          // Steep orientation: run 1 horizontal, rise n vertical
+          moves.push({ advX: 1, advY: n, angle: Math.atan2(n, 1), blockKey: block.key });
+        }
+      }
+
+      return moves;
+    }
+
     function computeQuadrant(rx, ry, blocks) {
-      // Walk the arc in quadrant-local coords
-      // x goes right from center, y goes down from top
-      // We walk from top (x=0, y=0) toward the 45-degree line and beyond to the right
+      // Walk from top-center to right-center of the ellipse.
+      // Quadrant-local coords: x goes right from center, y goes down from top.
+      // At the top, tangent is ~horizontal (angle ~0), at the side it's ~vertical (~PI/2).
+      const moves = buildMoves(blocks);
       const segments = [];
       let x = 0;
       let y = 0;
-
-      // We walk until we've covered the quadrant
-      // Quadrant spans from top-center to right-center
-      // In local coords: x from 0 to floor(rx), y from 0 to floor(ry)
       const maxX = Math.floor(rx);
       const maxY = Math.floor(ry);
 
-      while (x < maxX && y < maxY) {
-        // Current position on the ellipse in ellipse-space
-        // Map grid position to ellipse parameter
-        // ex, ey are the point on the ellipse closest to current grid position
+      while (x < maxX || y < maxY) {
+        // If one axis is maxed out, fill the other with flat blocks
+        if (x >= maxX) {
+          segments.push({ x: maxX, y, dx: 1, dy: 1, blockKey: 'flat' });
+          y++;
+          continue;
+        }
+        if (y >= maxY) {
+          segments.push({ x, y: maxY, dx: 1, dy: 1, blockKey: 'flat' });
+          x++;
+          continue;
+        }
+
+        // Map grid position to ellipse-space for tangent calculation.
+        // In ellipse coords: ex = distance right from center, eY = distance up from center.
         const ex = x + 0.5;
-        const ey = y + 0.5;
+        const eY = ry - (y + 0.5);
+        if (eY <= 0) { x++; continue; }
 
-        // Tangent angle at this point on the ellipse
-        // The gradient of the ellipse x^2/rx^2 + y^2/ry^2 = 1 is (2x/rx^2, 2y/ry^2)
-        // The tangent is perpendicular to the gradient
-        // Tangent angle from vertical: atan2(ry^2 * ex, rx^2 * ey)
-        const tangentAngle = Math.atan2(ry * ry * ex, rx * rx * ey);
+        // Tangent angle: 0 = horizontal, PI/2 = vertical
+        const tangentAngle = Math.atan2(ry * ry * ex, rx * rx * eY);
 
-        // Find best matching block
-        let bestBlock = null;
+        // Find best matching move that doesn't overshoot
+        let bestMove = null;
         let bestDiff = Infinity;
-        for (const block of blocks) {
-          const diff = Math.abs(tangentAngle - block.angle);
+        for (const move of moves) {
+          if (move.advX > 0 && x + move.advX > maxX) continue;
+          if (move.advY > 0 && y + move.advY > maxY) continue;
+          const diff = Math.abs(tangentAngle - move.angle);
           if (diff < bestDiff) {
             bestDiff = diff;
-            bestBlock = block;
+            bestMove = move;
           }
         }
 
-        // Determine orientation based on tangent angle
-        const vertical = tangentAngle <= Math.PI / 4;
-
-        let dx, dy;
-        if (vertical) {
-          // Steeper section: advance x by 1, y by block.dy
-          dx = 1;
-          dy = Math.max(1, bestBlock.dy);
-        } else {
-          // Shallower section: advance x by block.dy, y by 1
-          dx = Math.max(1, bestBlock.dy);
-          dy = 1;
+        // Fallback: single flat in the dominant direction
+        if (!bestMove) {
+          if (tangentAngle < Math.PI / 4) {
+            segments.push({ x, y, dx: 1, dy: 1, blockKey: 'flat' });
+            x++;
+          } else {
+            segments.push({ x, y, dx: 1, dy: 1, blockKey: 'flat' });
+            y++;
+          }
+          continue;
         }
 
-        // Don't overshoot the quadrant bounds
-        if (x + dx > maxX) dx = maxX - x;
-        if (y + dy > maxY) dy = maxY - y;
-        if (dx <= 0 || dy <= 0) break;
+        // Cells occupied by this block
+        const cellsX = Math.max(1, bestMove.advX);
+        const cellsY = Math.max(1, bestMove.advY);
 
         segments.push({
-          x, y, dx, dy,
-          blockKey: bestBlock.key,
-          vertical
+          x, y,
+          dx: cellsX,
+          dy: cellsY,
+          blockKey: bestMove.blockKey
         });
 
-        x += dx;
-        y += dy;
-      }
-
-      // Fill remaining gap to reach the edges if needed
-      // Fill remaining x with flat blocks (horizontal run)
-      while (x < maxX) {
-        const remaining = maxX - x;
-        segments.push({
-          x, y, dx: Math.min(remaining, 1), dy: 1,
-          blockKey: 'flat',
-          vertical: false
-        });
-        x += 1;
-      }
-
-      // Fill remaining y with flat blocks (vertical run)
-      while (y < maxY) {
-        segments.push({
-          x, y, dx: 1, dy: Math.min(maxY - y, 1),
-          blockKey: 'flat',
-          vertical: true
-        });
-        y += 1;
+        // Advance cursor
+        x += bestMove.advX;
+        y += bestMove.advY;
       }
 
       return segments;
